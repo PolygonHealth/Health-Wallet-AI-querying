@@ -3,10 +3,8 @@ from abc import ABC, abstractmethod
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.query_context import QueryContext
-from src.core.query_result import QueryResult
 from src.llm.base_client import BaseLLMClient
-
+from src.core.models import QueryContext, QueryResult
 
 class BaseStrategy(ABC):
     def __init__(self, db: AsyncSession, llm_client: BaseLLMClient) -> None:

@@ -5,7 +5,6 @@ from pydantic import BaseModel, Field
 
 from src.core.base_strategy import BaseStrategy
 from src.core.models import QueryContext, QueryResult
-from src.core.models import QueryResult
 from src.core.strategy_registry import register_strategy
 from src.db.queries import get_all_fhir_by_patient
 

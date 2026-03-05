@@ -19,3 +19,6 @@ venv/
 
 # Cursor
 .cursor/
+
+# Ruff
+.ruff_cache/

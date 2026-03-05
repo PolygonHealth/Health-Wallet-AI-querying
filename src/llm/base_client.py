@@ -2,6 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
+from pydantic import BaseModel
 
 
 class FinishReason(StrEnum):
@@ -22,7 +23,7 @@ class LLMUsage:
 
 @dataclass
 class LLMResponse:
-    text: str
+    response: str | BaseModel
     model: str
     usage: LLMUsage
     finish_reason: FinishReason = FinishReason.UNKNOWN
@@ -39,5 +40,6 @@ class BaseLLMClient(ABC):
         prompt: str,
         max_tokens: int,
         temperature: float,
+        response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
         ...

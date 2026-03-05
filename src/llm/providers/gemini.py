@@ -1,6 +1,7 @@
 import logging
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
 from src.config.settings import settings
 from src.llm.base_client import FinishReason, LLMResponse, LLMUsage, BaseLLMClient
@@ -28,6 +29,7 @@ class GeminiClient(BaseLLMClient):
         prompt: str,
         max_tokens: int,
         temperature: float,
+        response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
         self.logger.info(
             "llm_request | model=%s | prompt_len=%d",
@@ -35,7 +37,12 @@ class GeminiClient(BaseLLMClient):
             len(prompt),
         )
         try:
-            result = await self._call_gemini(prompt, max_tokens, temperature)
+            result = await self._call_gemini(
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                response_schema=response_schema,
+            )
             self.logger.info(
                 "llm_response | model=%s | tokens_out=%d",
                 self.model_id,
@@ -55,12 +62,17 @@ class GeminiClient(BaseLLMClient):
         prompt: str,
         max_tokens: int,
         temperature: float,
+        response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
         aclient = self._client.aio
         config = types.GenerateContentConfig(
             max_output_tokens=max_tokens,
             temperature=temperature,
         )
+        if response_schema:
+            config.response_mime_type = "application/json"
+            config.response_schema = response_schema
+        
         response = await aclient.models.generate_content(
             model=self.model_id,
             contents=prompt,
@@ -82,7 +94,7 @@ class GeminiClient(BaseLLMClient):
         )
 
         return LLMResponse(
-            text=text,
+            response=text,
             model=self.model_id,
             usage=LLMUsage(
                 input_tokens=input_tokens,

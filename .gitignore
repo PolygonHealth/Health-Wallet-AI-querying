@@ -16,3 +16,6 @@ venv/
 /.env.development
 /.env.test
 /.env.production
+
+# Cursor
+.cursor/

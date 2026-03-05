@@ -2,12 +2,18 @@
 node_modules/
 package-lock.json
 
-# Python
+# Python / Pytest
 __pycache__/
 *.py[cod]
 *.pyo
 env/
 venv/
+*.egg-info/
+.pytest_cache/
+.coverage
+coverage.xml
+pytest.ini
+pytest.ini
 
 # React
 /build/

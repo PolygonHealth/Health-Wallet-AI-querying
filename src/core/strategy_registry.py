@@ -7,6 +7,7 @@ def register_strategy(name: str):
     def decorator(cls: type[BaseStrategy]) -> type[BaseStrategy]:
         _REGISTRY[name] = cls
         return cls
+
     return decorator
 
 

@@ -1,8 +1,17 @@
+install:
+	pip install .
+
+dev:
+	pip install -e ".[dev]"
+
 run:
 	uvicorn src.api.app:create_app --factory --reload
 
 test:
 	pytest --cov=src --cov-report=term-missing
+
+test-unit:
+	pytest tests/unit -v --cov=src --cov-report=term-missing
 
 lint:
 	ruff check . && ruff format --check .

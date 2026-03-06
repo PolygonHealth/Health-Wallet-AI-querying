@@ -10,6 +10,7 @@ class QueryContext:
     max_tokens: int = 4096
     temperature: float = 0.1
 
+
 @dataclass
 class QueryResult:
     response_text: str

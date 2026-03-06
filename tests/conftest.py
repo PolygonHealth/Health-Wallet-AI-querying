@@ -12,10 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from testcontainers.postgres import PostgresContainer
 
 # Ensure test env before any src imports that read settings
-os.environ.setdefault("GOOGLE_API_KEY", "test-key-for-tests")
+os.environ.setdefault("GEMINI_API_KEY", "test-key-for-tests")
 os.environ.setdefault(
     "DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/test"
 )
+
 
 # Register mock LLM for tests (model="mock" in API/integration tests)
 def _register_mock_llm():

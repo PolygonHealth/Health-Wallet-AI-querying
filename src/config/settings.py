@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     )
 
     DATABASE_URL: str
-    GOOGLE_API_KEY: str
+    GEMINI_API_KEY: str
     DEFAULT_STRATEGY: str = "naive_dump"
     DEFAULT_MODEL: str = "gemini-3.0-flash"
     LOG_LEVEL: str = "INFO"

@@ -21,7 +21,7 @@ class GeminiClient(BaseLLMClient):
 
     def __init__(self, model_id: str) -> None:
         super().__init__(model_id=model_id)
-        self._client = genai.Client(api_key=settings.GOOGLE_API_KEY)
+        self._client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
     async def complete(
         self,
@@ -30,6 +30,12 @@ class GeminiClient(BaseLLMClient):
         temperature: float,
         response_schema: type[BaseModel] | None = None,
     ) -> LLMResponse:
+
+        # Guardrail: Check token limit before calling the API
+        rejected = self.check_token_limit(prompt)
+        if rejected:
+            return rejected
+
         self.logger.info(
             "llm_request | model=%s | prompt_len=%d",
             self.model_id,
@@ -71,7 +77,7 @@ class GeminiClient(BaseLLMClient):
         if response_schema:
             config.response_mime_type = "application/json"
             config.response_schema = response_schema
-        
+
         response = await aclient.models.generate_content(
             model=self.model_id,
             contents=prompt,
@@ -85,12 +91,12 @@ class GeminiClient(BaseLLMClient):
         candidate = response.candidates[0] if response.candidates else None
         raw_reason = (
             candidate.finish_reason.name.lower()
-            if candidate and hasattr(candidate, "finish_reason") and candidate.finish_reason
+            if candidate
+            and hasattr(candidate, "finish_reason")
+            and candidate.finish_reason
             else "unknown"
         )
-        finish_reason = _GEMINI_FINISH_REASON_MAP.get(
-            raw_reason, FinishReason.UNKNOWN
-        )
+        finish_reason = _GEMINI_FINISH_REASON_MAP.get(raw_reason, FinishReason.UNKNOWN)
 
         return LLMResponse(
             response=text,

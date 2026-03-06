@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.llm.base_client import BaseLLMClient
 from src.core.models import QueryContext, QueryResult
 
+
 class BaseStrategy(ABC):
     def __init__(self, db: AsyncSession, llm_client: BaseLLMClient) -> None:
         self.db = db
@@ -13,10 +14,8 @@ class BaseStrategy(ABC):
         self.logger = logging.getLogger(type(self).__name__)
 
     @abstractmethod
-    async def execute(self, context: QueryContext) -> QueryResult:
-        ...
+    async def execute(self, context: QueryContext) -> QueryResult: ...
 
     @property
     @abstractmethod
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...

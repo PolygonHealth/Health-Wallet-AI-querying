@@ -53,7 +53,7 @@ async def run_query(
         llm_client = create_llm_client(model_name)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-        
+
     strategy = resolve_strategy(strategy_name, db, llm_client)
     context = QueryContext(
         patient_id=req.patient_id,

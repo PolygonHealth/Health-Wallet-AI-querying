@@ -7,14 +7,16 @@ from src.core.base_strategy import BaseStrategy
 from src.core.models import QueryContext, QueryResult
 from src.core.strategy_registry import register_strategy
 from src.db.queries import get_all_fhir_by_patient
+from src.llm.base_client import FinishReason
 
 
 class NaiveDumpLLMResponse(BaseModel):
     """Schema the LLM must return. Gemini enforces this via response_schema."""
+
     answer: str
     resource_ids: list[str] = Field(
-        default_factory=list, 
-        description="List of resource IDs used to answer the question."
+        default_factory=list,
+        description="List of resource IDs used to answer the question.",
     )
 
 
@@ -46,6 +48,18 @@ class NaiveDumpStrategy(BaseStrategy):
             )
             latency_ms = (time.perf_counter() - t0) * 1000
 
+            if response.finish_reason == FinishReason.REJECTED:
+                return QueryResult(
+                    response_text="",
+                    resource_ids=[],
+                    model_used=response.model,
+                    strategy_used=self.name,
+                    tokens_in=response.usage.input_tokens,
+                    tokens_out=0,
+                    latency_ms=latency_ms,
+                    error=response.response,
+                )
+
             self.logger.info(
                 "llm_call_complete | model=%s | tokens_in=%d | latency_ms=%.0f",
                 response.model,
@@ -54,9 +68,7 @@ class NaiveDumpStrategy(BaseStrategy):
             )
 
             if response.finish_reason.value == "max_tokens":
-                self.logger.warning(
-                    "llm_truncated | patient_id=%s", context.patient_id
-                )
+                self.logger.warning("llm_truncated | patient_id=%s", context.patient_id)
 
             # Parse structured JSON into Pydantic model
             parsed = NaiveDumpLLMResponse.model_validate_json(response.response)

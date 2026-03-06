@@ -12,9 +12,9 @@ def test_known_model_returns_correct_client_type():
 
 
 def test_known_model_gemini_returns_gemini_client():
-    client = create_llm_client("gemini-3.0-flash")
+    client = create_llm_client("gemini-3-flash-preview")
     assert isinstance(client, GeminiClient)
-    assert client.model_id == "gemini-3.0-flash"
+    assert client.model_id == "gemini-3-flash-preview"
 
 
 def test_unknown_model_raises_value_error_with_available_list():

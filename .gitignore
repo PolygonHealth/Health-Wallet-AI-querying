@@ -14,6 +14,7 @@ venv/
 coverage.xml
 pytest.ini
 pytest.ini
+.polygon-health/
 
 # React
 /build/
@@ -25,6 +26,7 @@ pytest.ini
 
 # Cursor
 .cursor/
+.vscode/
 
 # Ruff
 .ruff_cache/

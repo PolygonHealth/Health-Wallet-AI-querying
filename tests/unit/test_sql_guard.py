@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.core.strategies.agentic.sql_guard import SQLValidationError, validate_sql
+from src.core.strategies.utils.sql_guard import SQLValidationError, validate_sql
 
 
 def test_valid_select_with_pid():

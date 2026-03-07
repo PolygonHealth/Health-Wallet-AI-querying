@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.core.strategies.agentic.retry import retry_llm_call
+from src.core.strategies.utils.retry import retry_llm_call
 
 
 @pytest.mark.asyncio

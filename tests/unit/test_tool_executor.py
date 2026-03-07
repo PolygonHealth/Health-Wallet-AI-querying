@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.core.strategies.agentic.tool_executor import ToolExecutor
+from src.core.strategies.utils.tool_executor import ToolExecutor
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def executor(mock_db):
 async def test_get_patient_overview(executor, mock_db):
     mock_data = {"by_type": [{"resource_type": "Condition", "count": 5}], "total_resources": 5}
     with patch(
-        "src.core.strategies.agentic.tool_executor.get_patient_overview",
+        "src.core.strategies.utils.tool_executor.get_patient_overview",
         new_callable=AsyncMock,
         return_value=mock_data,
     ):
@@ -36,7 +36,7 @@ async def test_get_resources_by_type(executor, mock_db):
         {"id": "r1", "resource_type": "Condition", "resource": {}, "received_at": ""},
     ]
     with patch(
-        "src.core.strategies.agentic.tool_executor.get_fhir_by_type",
+        "src.core.strategies.utils.tool_executor.get_fhir_by_type",
         new_callable=AsyncMock,
         return_value=rows,
     ):
@@ -47,10 +47,10 @@ async def test_get_resources_by_type(executor, mock_db):
 
 @pytest.mark.asyncio
 async def test_execute_sql_validation_error(executor):
-    from src.core.strategies.agentic.sql_guard import SQLValidationError
+    from src.core.strategies.utils.sql_guard import SQLValidationError
 
     with patch(
-        "src.core.strategies.agentic.tool_executor.validate_sql",
+        "src.core.strategies.utils.tool_executor.validate_sql",
         side_effect=SQLValidationError("SQL must use :pid"),
     ):
         result, ids = await executor.execute("execute_sql", {"sql": "SELECT * FROM x"})

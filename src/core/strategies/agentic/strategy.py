@@ -8,15 +8,15 @@ from google.genai import types
 from src.core.base_strategy import BaseStrategy
 from src.core.models import QueryContext, QueryResult
 from src.core.strategy_registry import register_strategy
-from src.core.strategies.agentic.constants import (
+from src.core.strategies.utils.constants import (
     MAX_SINGLE_RESULT_CHARS,
     MAX_TOTAL_TOOL_CHARS,
     MAX_TURNS,
 )
-from src.core.strategies.agentic.prompts import BUDGET_EXCEEDED_PROMPT, SYSTEM_PROMPT
-from src.core.strategies.agentic.retry import retry_llm_call
-from src.core.strategies.agentic.tool_executor import ToolExecutor
-from src.core.strategies.agentic.tools import get_agentic_tools
+from src.core.strategies.utils.prompts import BUDGET_EXCEEDED_PROMPT, SYSTEM_PROMPT
+from src.core.strategies.utils.retry import retry_llm_call
+from src.core.strategies.utils.tool_executor import ToolExecutor
+from src.core.strategies.utils.tools import get_agentic_tools
 from src.llm.providers.gemini import GeminiClient
 
 

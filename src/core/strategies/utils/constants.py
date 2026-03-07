@@ -1,4 +1,4 @@
-"""All magic numbers for the agentic strategy. Never hardcode in strategy/executor/guard."""
+"""Shared constants for agentic-style strategies. Never hardcode in strategy/executor/guard."""
 
 # Agent loop
 MAX_TURNS = 15  # Max tool-calling rounds before forcing an answer

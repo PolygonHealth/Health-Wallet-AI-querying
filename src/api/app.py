@@ -47,4 +47,13 @@ def create_app() -> FastAPI:
     app.include_router(benchmark.router, prefix="/api/v1", tags=["benchmark"])
     app.include_router(health.router, tags=["health"])
 
+
+    @app.get("/")
+    async def root():
+        return {
+            "service": "Polygon Health AI Query Engine",
+            "status": "running",
+            "docs": "/docs",
+            "health": "/health",
+        }
     return app

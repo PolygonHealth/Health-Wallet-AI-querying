@@ -70,8 +70,56 @@ def _register_agentic_mock_llm():
     client_factory._MODEL_REGISTRY["agentic-mock"] = (_factory, "agentic-mock")
 
 
+def _register_langgraph_mock_llm():
+    """Register langgraph-mock for LangGraph strategy integration tests."""
+    from src.llm import client_factory
+    from src.llm.base_client import FinishReason, LLMUsage
+    from src.llm.providers.gemini import ToolCallResponse
+    from tests.mocks.mock_gemini_for_agentic import MockGeminiForAgentic
+
+    def _factory(model_id: str):
+        return MockGeminiForAgentic(
+            model_id=model_id,
+            responses=[
+                ToolCallResponse(
+                    text='{"intent": "relevant", "reason": "Health question", "suggestion": ""}',
+                    function_calls=[],
+                    usage=LLMUsage(input_tokens=80, output_tokens=30),
+                    finish_reason=FinishReason.STOP,
+                ),
+                ToolCallResponse(
+                    text="",
+                    function_calls=[{"id": "1", "name": "get_patient_overview", "args": {}}],
+                    usage=LLMUsage(input_tokens=150, output_tokens=5),
+                    finish_reason=FinishReason.STOP,
+                ),
+                ToolCallResponse(
+                    text="",
+                    function_calls=[
+                        {
+                            "id": "2",
+                            "name": "get_resources_by_type",
+                            "args": {"resource_type": "Condition"},
+                        },
+                    ],
+                    usage=LLMUsage(input_tokens=200, output_tokens=10),
+                    finish_reason=FinishReason.STOP,
+                ),
+                ToolCallResponse(
+                    text="Based on the data, the patient has hypertension.",
+                    function_calls=[],
+                    usage=LLMUsage(input_tokens=250, output_tokens=15),
+                    finish_reason=FinishReason.STOP,
+                ),
+            ],
+        )
+
+    client_factory._MODEL_REGISTRY["langgraph-mock"] = (_factory, "langgraph-mock")
+
+
 _register_mock_llm()
 _register_agentic_mock_llm()
+_register_langgraph_mock_llm()
 
 
 @pytest.fixture(scope="session")

@@ -1,4 +1,4 @@
-"""System prompt and context budget warning for the agentic strategy."""
+"""Shared prompts for agentic-style strategies."""
 
 SYSTEM_PROMPT = """You are a clinical assistant helping answer a patient's questions about their FHIR health data.
 

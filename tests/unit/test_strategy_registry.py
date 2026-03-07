@@ -22,4 +22,5 @@ def test_list_strategies_returns_all_registered():
     names = list_strategies()
     assert "naive_dump" in names
     assert "agentic" in names
+    assert "langgraph" in names
     assert isinstance(names, list)

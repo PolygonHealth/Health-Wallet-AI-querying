@@ -6,7 +6,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
-from src.core.strategies.agentic.constants import (
+from src.core.strategies.utils.constants import (
     MAX_RETRIES,
     RETRY_BASE_DELAY,
     RETRYABLE_STATUS_CODES,

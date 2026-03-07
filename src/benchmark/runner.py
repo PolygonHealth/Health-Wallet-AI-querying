@@ -17,7 +17,6 @@ class BenchmarkRow:
     tokens_out: int = 0
     latency_ms: float = 0.0
     fhir_resources_loaded: int = 0
-    documents_trimmed: bool = False
     expected_answer: str = ""
     error: str | None = None
 
@@ -41,7 +40,6 @@ class BenchmarkRow:
             tokens_out=result.tokens_out,
             latency_ms=result.latency_ms,
             fhir_resources_loaded=getattr(result, "fhir_resources_loaded", 0),
-            documents_trimmed=getattr(result, "documents_trimmed", False),
             expected_answer=expected_answer,
             error=result.error,
         )

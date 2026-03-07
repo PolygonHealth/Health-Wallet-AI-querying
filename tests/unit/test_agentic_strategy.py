@@ -92,7 +92,7 @@ async def test_handles_tool_calls_then_final_answer(mock_db):
     strategy = AgenticStrategy(db=mock_db, llm_client=llm)
 
     with patch(
-        "src.core.strategies.agentic.tool_executor.get_patient_overview",
+        "src.core.strategies.utils.tool_executor.get_patient_overview",
         new_callable=AsyncMock,
         return_value={"by_type": [{"resource_type": "Condition", "count": 2}], "total_resources": 7},
     ):

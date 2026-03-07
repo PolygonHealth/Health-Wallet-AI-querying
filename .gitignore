@@ -16,6 +16,11 @@ pytest.ini
 pytest.ini
 .polygon-health/
 
+# Test Scripts
+merge_code.py
+merged_code.txt
+fhir_benchmark_queries.csv
+
 # React
 /build/
 /.env

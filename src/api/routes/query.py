@@ -25,7 +25,6 @@ class QueryResponse(BaseModel):
     tokens_in: int
     tokens_out: int
     latency_ms: float
-    documents_trimmed: bool = False
     error: str | None = None
 
     @classmethod

@@ -2,7 +2,7 @@
 
 import re
 
-from src.core.strategies.agentic.constants import ALLOWED_TABLES, SQL_MAX_ROWS
+from src.core.strategies.utils.constants import ALLOWED_TABLES, SQL_MAX_ROWS
 
 
 class SQLValidationError(Exception):

@@ -20,7 +20,6 @@ def write_benchmark_excel(rows: list[BenchmarkRow]) -> BytesIO:
         "Tokens Out",
         "Latency (ms)",
         "FHIR Resources Loaded",
-        "Documents Trimmed",
         "Expected Answer",
         "Error",
     ]
@@ -38,7 +37,6 @@ def write_benchmark_excel(rows: list[BenchmarkRow]) -> BytesIO:
                 row.tokens_out,
                 row.latency_ms,
                 row.fhir_resources_loaded,
-                row.documents_trimmed,
                 row.expected_answer,
                 row.error or "",
             ]

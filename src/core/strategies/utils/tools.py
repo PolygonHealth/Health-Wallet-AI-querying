@@ -1,10 +1,10 @@
-"""Gemini tool definitions (FunctionDeclarations) for the agentic strategy."""
+"""Gemini tool definitions (FunctionDeclarations) shared by agentic-style strategies."""
 
 from google.genai import types
 
 
 def get_agentic_tools() -> list[types.Tool]:
-    """Return list of Tool objects with function declarations for the agentic strategy."""
+    """Return list of Tool objects with function declarations for agentic-style strategies."""
     declarations = [
         _get_patient_overview(),
         _get_resources_by_type(),

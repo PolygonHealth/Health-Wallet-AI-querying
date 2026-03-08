@@ -7,7 +7,7 @@ MAX_SINGLE_RESULT_CHARS = 50_000  # ~12.5K tokens — cap per individual tool re
 
 # SQL guard
 SQL_MAX_ROWS = 50  # Hard cap on rows from execute_sql
-ALLOWED_TABLES = {"fhir_resources", "fhir_note_text"}
+ALLOWED_TABLES = {"fhir_resources"}
 
 # Retry
 MAX_RETRIES = 2  # Retries per LLM call (not per turn — per API call)

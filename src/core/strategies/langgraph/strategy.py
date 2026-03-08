@@ -4,11 +4,11 @@ import time
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.base_strategy import BaseStrategy
 from src.core.models import QueryContext, QueryResult
 from src.core.strategy_registry import register_strategy
-from src.core.strategies.utils.prompts import SYSTEM_PROMPT
 from src.core.strategies.langgraph.edges import (
     route_after_call_tools,
     route_after_classify,
@@ -20,11 +20,17 @@ from src.core.strategies.langgraph.nodes.call_tools import create_call_tools_nod
 from src.core.strategies.langgraph.nodes.execute_tools import create_execute_tools_node
 from src.core.strategies.langgraph.nodes.synthesize import create_synthesize_node
 from src.core.strategies.langgraph.state import ConversationState
+from src.llm.base_client import BaseLLMClient
 
 
 @register_strategy("langgraph")
 class LanggraphStrategy(BaseStrategy):
     """Enhanced agentic strategy with LangGraph: classification, decline paths, conversation memory."""
+
+    def __init__(self, db: AsyncSession, llm_client: BaseLLMClient) -> None:
+        super().__init__(db, llm_client)
+        self._checkpointer = MemorySaver()
+
 
     @property
     def name(self) -> str:
@@ -51,17 +57,14 @@ class LanggraphStrategy(BaseStrategy):
         builder.add_conditional_edges("execute_tools", route_after_execute_tools)
         builder.add_edge("synthesize", "__end__")
 
-        checkpointer = MemorySaver()
-        return builder.compile(checkpointer=checkpointer)
+        return builder.compile(checkpointer=self._checkpointer)
 
     async def execute(self, context: QueryContext) -> QueryResult:
         try:
             t0 = time.perf_counter()
             graph = self._build_graph(context)
 
-            first_message = (
-                f"{SYSTEM_PROMPT}\n\nPatient question: {context.query_text}"
-            )
+            first_message = f"Patient question: {context.query_text}"
             initial_messages = [{"role": "user", "parts": [{"text": first_message}]}]
 
             initial_state: ConversationState = {

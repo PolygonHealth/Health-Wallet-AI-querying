@@ -19,11 +19,11 @@ class ClassifyResult(BaseModel):
 
     intent: Literal["relevant", "irrelevant", "needs_clarification"]
     reason: str
-    suggestion: str = ""
 
 
 def _format_messages_for_classify(messages: list[dict]) -> str:
     """Format state messages as readable text for classify prompt."""
+
     lines: list[str] = []
     for m in messages:
         role = m.get("role", "user")

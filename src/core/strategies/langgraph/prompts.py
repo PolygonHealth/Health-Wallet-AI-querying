@@ -5,7 +5,7 @@ from src.core.strategies.utils.prompts import (
     SYSTEM_PROMPT,
 )
 
-CLASSIFY_PROMPT = """
+CLASSIFY_PROMPT = r"""
 You classify whether a patient's message (possibly in a conversation) is a relevant FHIR related question, irrelevant, or needs clarification.
 
 Respond with JSON only: {"intent": "relevant" | "irrelevant" | "needs_clarification", "reason": "...", "suggestion": "..."}

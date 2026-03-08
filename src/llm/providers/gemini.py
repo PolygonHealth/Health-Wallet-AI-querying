@@ -5,6 +5,7 @@ from google.genai import types
 from pydantic import BaseModel
 
 from src.config.settings import settings
+from src.core.strategies.utils.prompts import SYSTEM_PROMPT
 from src.llm.base_client import FinishReason, LLMResponse, LLMUsage, BaseLLMClient
 
 
@@ -139,6 +140,7 @@ class GeminiClient(BaseLLMClient):
         config = types.GenerateContentConfig(
             max_output_tokens=max_tokens,
             temperature=temperature,
+            system_instruction=SYSTEM_PROMPT
         )
         if use_tools and tools:
             config.tools = tools

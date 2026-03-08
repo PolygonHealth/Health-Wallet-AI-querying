@@ -67,7 +67,7 @@ def create_execute_tools_node(db: AsyncSession, context: QueryContext):
                     "tool_call | turn=%d | tool=%s | args=%s",
                     turn_count,
                     fc_name,
-                    str(fc_args)[:200],
+                    str(fc_args),
                 )
                 result_json, resource_ids = await executor.execute(fc_name, fc_args)
                 all_resource_ids.extend(resource_ids)

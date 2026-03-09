@@ -5,7 +5,6 @@ import src.core  # noqa: F401 - triggers strategy registration
 from src.api.dependencies import get_db, resolve_strategy
 from src.config.settings import settings
 from src.core.models import QueryContext
-from src.llm.client_factory import create_llm_client
 
 router = APIRouter()
 
@@ -48,12 +47,7 @@ async def run_query(
 ):
     strategy_name = req.strategy or settings.DEFAULT_STRATEGY
     model_name = req.model or settings.DEFAULT_MODEL
-    try:
-        llm_client = create_llm_client(model_name)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    strategy = resolve_strategy(strategy_name, db, llm_client)
+    strategy = resolve_strategy(strategy_name, db, model_name)
     context = QueryContext(
         patient_id=req.patient_id,
         query_text=req.query,

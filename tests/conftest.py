@@ -18,6 +18,11 @@ os.environ.setdefault(
 )
 
 
+# Load src.core first to avoid circular import when registering mocks that import gemini
+def _ensure_core_loaded():
+    import src.core  # noqa: F401
+
+
 # Register mock LLM for tests (model="mock" in API/integration tests)
 def _register_mock_llm():
     from src.llm import client_factory
@@ -71,52 +76,17 @@ def _register_agentic_mock_llm():
 
 
 def _register_langgraph_mock_llm():
-    """Register langgraph-mock for LangGraph strategy integration tests."""
-    from src.llm import client_factory
-    from src.llm.base_client import FinishReason, LLMUsage
-    from src.llm.providers.gemini import ToolCallResponse
-    from tests.mocks.mock_gemini_for_agentic import MockGeminiForAgentic
+    """Register langgraph-mock: MockLangChainLLM for LangGraph strategy integration tests."""
+    from src.llm.provider import register_llm_override
+    from tests.mocks.mock_langchain_llm import MockLangChainLLM
 
-    def _factory(model_id: str):
-        return MockGeminiForAgentic(
-            model_id=model_id,
-            responses=[
-                ToolCallResponse(
-                    text='{"intent": "relevant", "reason": "Health question", "suggestion": ""}',
-                    function_calls=[],
-                    usage=LLMUsage(input_tokens=80, output_tokens=30),
-                    finish_reason=FinishReason.STOP,
-                ),
-                ToolCallResponse(
-                    text="",
-                    function_calls=[{"id": "1", "name": "get_patient_overview", "args": {}}],
-                    usage=LLMUsage(input_tokens=150, output_tokens=5),
-                    finish_reason=FinishReason.STOP,
-                ),
-                ToolCallResponse(
-                    text="",
-                    function_calls=[
-                        {
-                            "id": "2",
-                            "name": "get_resources_by_type",
-                            "args": {"resource_type": "Condition"},
-                        },
-                    ],
-                    usage=LLMUsage(input_tokens=200, output_tokens=10),
-                    finish_reason=FinishReason.STOP,
-                ),
-                ToolCallResponse(
-                    text="Based on the data, the patient has hypertension.",
-                    function_calls=[],
-                    usage=LLMUsage(input_tokens=250, output_tokens=15),
-                    finish_reason=FinishReason.STOP,
-                ),
-            ],
-        )
+    def _factory():
+        return MockLangChainLLM()
 
-    client_factory._MODEL_REGISTRY["langgraph-mock"] = (_factory, "langgraph-mock")
+    register_llm_override("langgraph-mock", _factory)
 
 
+_ensure_core_loaded()
 _register_mock_llm()
 _register_agentic_mock_llm()
 _register_langgraph_mock_llm()

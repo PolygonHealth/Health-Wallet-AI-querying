@@ -15,7 +15,7 @@ from src.db.queries import (
     execute_raw_sql,
     get_patient_overview,
     get_fhir_by_type,
-    get_schema_info,
+    get_fhir_resources_schema_info,
     search_resources_by_keyword,
 )
 
@@ -58,7 +58,7 @@ class ToolExecutor:
                 json_str = json.dumps(truncated, default=str)
             return json_str, resource_ids
         except Exception as e:
-            logger.warning("tool_error | tool=%s | error=%s", tool_name, str(e))
+            logger.error("tool_error | tool=%s | error=%s", tool_name, str(e))
             return json.dumps({"error": str(e)}), []
 
     async def _dispatch(self, tool_name: str, args: dict) -> tuple[dict | list, list[str]]:
@@ -71,7 +71,7 @@ class ToolExecutor:
             resource_type = args.get("resource_type", "")
             limit = args.get("limit", DEFAULT_RESOURCE_LIMIT)
             rows = await get_fhir_by_type(self.db, self.patient_id, resource_type, limit)
-            ids = [r["id"] for r in rows]
+            ids = [r["resource_id"] for r in rows]
             return {"resources": rows, "count": len(rows)}, ids
 
         if tool_name == "search_resources_by_keyword":
@@ -80,7 +80,7 @@ class ToolExecutor:
             rows = await search_resources_by_keyword(
                 self.db, self.patient_id, keyword, limit
             )
-            ids = [r["id"] for r in rows]
+            ids = [r["resource_id"] for r in rows]
             return {"resources": rows, "count": len(rows)}, ids
 
         if tool_name == "execute_sql":
@@ -91,11 +91,15 @@ class ToolExecutor:
                 return {"error": str(e)}, []
             params = {"pid": self.patient_id}
             rows = await execute_raw_sql(self.db, validated, params)
-            ids = [str(r.get("id", "")) for r in rows if r.get("id")]
+            ids = [
+                str(r.get("resource_id") or r.get("id"))
+                for r in rows
+                if r.get("resource_id") or r.get("id")
+            ]            
             return {"rows": rows, "count": len(rows)}, ids
 
-        if tool_name == "get_schema_info":
-            schema = await get_schema_info(self.db)
+        if tool_name == "get_fhir_resources_schema_info":
+            schema = await get_fhir_resources_schema_info(self.db)
             return schema, []
 
         if tool_name == "finish_with_answer":

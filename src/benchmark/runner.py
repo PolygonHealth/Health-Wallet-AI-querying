@@ -93,8 +93,14 @@ class BenchmarkRunner:
                     )
                     try:
                         strategy_cls = get_strategy_class(strat)
-                        llm_client = create_llm_client(model_name)
-                        strategy = strategy_cls(db=self.db, llm_client=llm_client)
+                        if strat == "langgraph":
+                            from src.llm.provider import create_llm
+
+                            llm = create_llm(model_name)
+                            strategy = strategy_cls(db=self.db, llm=llm)
+                        else:
+                            llm_client = create_llm_client(model_name)
+                            strategy = strategy_cls(db=self.db, llm_client=llm_client)
                         context = QueryContext(
                             patient_id=patient_id,
                             query_text=query_text,

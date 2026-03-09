@@ -4,12 +4,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from langchain_core.messages import AIMessage
+
 from src.core.models import QueryContext
-from src.core.strategies.langgraph.edges import (
-    route_after_call_tools,
-    route_after_classify,
-    route_after_execute_tools,
-)
+from src.core.strategies.langgraph.edges import route_after_classify, route_after_llm
 from src.core.strategies.langgraph.nodes.decline import decline_node
 from src.core.strategies.langgraph.state import (
     QUERY_INTENT_IRRELEVANT,
@@ -21,7 +19,7 @@ from src.core.strategies.langgraph.state import (
 
 def test_route_after_classify_relevant():
     state: ConversationState = {"query_intent": QUERY_INTENT_RELEVANT}
-    assert route_after_classify(state) == "call_tools"
+    assert route_after_classify(state) == "llm"
 
 
 def test_route_after_classify_irrelevant():
@@ -34,34 +32,38 @@ def test_route_after_classify_needs_clarification():
     assert route_after_classify(state) == "decline"
 
 
-def test_route_after_call_tools_with_function_calls():
+def test_route_after_llm_with_tool_calls():
     state: ConversationState = {
         "messages": [
-            {"role": "user", "parts": [{"text": "q"}]},
-            {"role": "model", "parts": [{"function_call": {"name": "foo", "args": {}}}]},
+            AIMessage(content="q"),
+            AIMessage(content="", tool_calls=[{"id": "1", "name": "foo", "args": {}}]),
         ],
+        "turn_count": 1,
     }
-    assert route_after_call_tools(state) == "execute_tools"
+    assert route_after_llm(state) == "tools"
 
 
-def test_route_after_call_tools_no_function_calls():
+def test_route_after_llm_no_tool_calls():
     state: ConversationState = {
         "messages": [
-            {"role": "user", "parts": [{"text": "q"}]},
-            {"role": "model", "parts": [{"text": "answer"}]},
+            AIMessage(content="q"),
+            AIMessage(content="The answer is X."),
         ],
+        "turn_count": 1,
     }
-    assert route_after_call_tools(state) == "synthesize"
+    assert route_after_llm(state) == "synthesize"
 
 
-def test_route_after_execute_tools_budget_ok():
-    state: ConversationState = {"budget_exceeded": False}
-    assert route_after_execute_tools(state) == "call_tools"
+def test_route_after_llm_max_turns():
+    from src.core.strategies.utils.constants import MAX_TURNS
 
-
-def test_route_after_execute_tools_budget_exceeded():
-    state: ConversationState = {"budget_exceeded": True}
-    assert route_after_execute_tools(state) == "synthesize"
+    state: ConversationState = {
+        "messages": [
+            AIMessage(content="", tool_calls=[{"id": "1", "name": "foo", "args": {}}]),
+        ],
+        "turn_count": MAX_TURNS,
+    }
+    assert route_after_llm(state) == "synthesize"
 
 
 def test_decline_node_irrelevant():
@@ -80,47 +82,26 @@ def test_decline_node_needs_clarification():
 
 @pytest.mark.asyncio
 async def test_langgraph_strategy_execute_returns_query_result():
-    """Smoke test: LanggraphStrategy.execute returns QueryResult with mock LLM."""
-    from src.llm.base_client import FinishReason, LLMUsage
-    from src.llm.providers.gemini import ToolCallResponse
+    """Smoke test: LanggraphStrategy.execute returns QueryResult with mock LLM and tools."""
+    from tests.mocks.mock_langchain_llm import MockLangChainLLM
 
     from src.core.strategies.langgraph.strategy import LanggraphStrategy
 
     mock_db = AsyncMock()
-    mock_llm = MagicMock()
-    mock_llm.model_id = "langgraph-mock"
-    mock_llm.generate_with_tools = AsyncMock(
-        side_effect=[
-            ToolCallResponse(
-                text='{"intent": "relevant", "reason": "Health question", "suggestion": ""}',
-                function_calls=[],
-                usage=LLMUsage(input_tokens=80, output_tokens=30),
-                finish_reason=FinishReason.STOP,
-            ),
-            ToolCallResponse(
-                text="",
-                function_calls=[{"name": "get_patient_overview", "args": {}}],
-                usage=LLMUsage(input_tokens=150, output_tokens=5),
-                finish_reason=FinishReason.STOP,
-            ),
-            ToolCallResponse(
-                text="The patient has hypertension.",
-                function_calls=[],
-                usage=LLMUsage(input_tokens=200, output_tokens=10),
-                finish_reason=FinishReason.STOP,
-            ),
-        ],
-    )
+    mock_llm = MockLangChainLLM()
 
-    strategy = LanggraphStrategy(db=mock_db, llm_client=mock_llm)
-    mock_exec = AsyncMock()
-    mock_exec.execute = AsyncMock(
-        return_value=('{"resources": [], "count": 0}', []),
-    )
+    mock_executor = AsyncMock()
+    mock_executor.execute = AsyncMock(return_value=('{"resources": [], "count": 0}', []))
+
     with patch(
-        "src.core.strategies.langgraph.nodes.execute_tools.ToolExecutor",
-        return_value=mock_exec,
+        "src.core.strategies.langgraph.strategy.create_fhir_tools",
+        return_value=[],  # No tools - LLM will return final answer on first call
     ):
+        # Use mock that returns final answer immediately (no tool calls) to avoid DB
+        mock_llm._llm_responses = [
+            AIMessage(content="The patient has hypertension.", tool_calls=[]),
+        ]
+        strategy = LanggraphStrategy(db=mock_db, llm=mock_llm)
         context = QueryContext(
             patient_id="p1",
             query_text="What conditions do I have?",
@@ -131,4 +112,4 @@ async def test_langgraph_strategy_execute_returns_query_result():
 
     assert result.response_text
     assert result.strategy_used == "langgraph"
-    assert result.resource_ids is not None
+    assert result.resource_ids == []

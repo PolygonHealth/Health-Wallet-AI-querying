@@ -12,7 +12,7 @@ async def get_all_fhir_by_patient(db: AsyncSession, patient_id: str) -> list[dic
     result = await db.execute(
         text(
             """
-            SELECT id, resource_type, resource, received_at
+            SELECT id AS resource_id, resource_type, resource, received_at
             FROM fhir_resources
             WHERE patient_id = :pid
             ORDER BY received_at
@@ -22,7 +22,7 @@ async def get_all_fhir_by_patient(db: AsyncSession, patient_id: str) -> list[dic
     )
     rows = [
         {
-            "id": str(r.id),
+            "resource_id": str(r.resource_id),
             "resource_type": r.resource_type,
             "resource": r.resource,
             "received_at": str(r.received_at) if r.received_at else "",
@@ -84,7 +84,7 @@ async def get_fhir_by_type(
     result = await db.execute(
         text(
             """
-            SELECT id, resource_type, resource, received_at
+            SELECT id AS resource_id, resource_type, resource, received_at
             FROM fhir_resources
             WHERE patient_id = :pid AND resource_type = :rt
             ORDER BY received_at
@@ -95,7 +95,7 @@ async def get_fhir_by_type(
     )
     rows = [
         {
-            "id": str(r.id),
+            "resource_id": str(r.resource_id),
             "resource_type": r.resource_type,
             "resource": r.resource,
             "received_at": str(r.received_at) if r.received_at else "",
@@ -121,7 +121,7 @@ async def search_resources_by_keyword(
     result = await db.execute(
         text(
             """
-            SELECT id, resource_type, resource, received_at
+            SELECT id AS resource_id, resource_type, resource, received_at
             FROM fhir_resources
             WHERE patient_id = :pid AND resource::text ILIKE :pat
             ORDER BY received_at
@@ -132,7 +132,7 @@ async def search_resources_by_keyword(
     )
     rows = [
         {
-            "id": str(r.id),
+            "resource_id": str(r.resource_id),
             "resource_type": r.resource_type,
             "resource": r.resource,
             "received_at": str(r.received_at) if r.received_at else "",
@@ -168,7 +168,7 @@ async def execute_raw_sql(
     return out
 
 
-async def get_schema_info(db: AsyncSession) -> dict:
+async def get_fhir_resources_schema_info(db: AsyncSession) -> dict:
     """Return column names and types for fhir_resources and fhir_note_text."""
 
     result = await db.execute(
@@ -177,7 +177,7 @@ async def get_schema_info(db: AsyncSession) -> dict:
             SELECT table_name, column_name, data_type
             FROM information_schema.columns
             WHERE table_schema = 'public'
-            AND table_name IN ('fhir_resources', 'fhir_note_text')
+            AND table_name IN ('fhir_resources')
             ORDER BY table_name, ordinal_position
             """
         ),

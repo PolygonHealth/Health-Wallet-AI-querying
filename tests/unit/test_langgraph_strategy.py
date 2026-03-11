@@ -101,7 +101,7 @@ async def test_langgraph_strategy_execute_returns_query_result():
         mock_llm._llm_responses = [
             AIMessage(content="The patient has hypertension.", tool_calls=[]),
         ]
-        strategy = LanggraphStrategy(db=mock_db, llm=mock_llm)
+        strategy = LanggraphStrategy(session_factory=mock_db, llm=mock_llm)
         context = QueryContext(
             patient_id="p1",
             query_text="What conditions do I have?",

@@ -21,19 +21,19 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 def resolve_strategy(
     name: str,
-    db: AsyncSession,
+    session_factory: async_sessionmaker[AsyncSession],
     model_id: str,
 ):
     """
-    Resolve strategy instance. For langgraph: uses create_llm and LanggraphStrategy(db, llm).
+    Resolve strategy instance. For langgraph: uses create_llm and LanggraphStrategy(session_factory, llm).
     For others: uses create_llm_client and strategy_cls(db, llm_client).
     """
     try:
         strategy_cls = get_strategy_class(name)
         if name == "langgraph":
             llm = create_llm(model_id)
-            return strategy_cls(db=db, llm=llm)
+            return strategy_cls(session_factory=session_factory, llm=llm)
         llm_client = create_llm_client(model_id)
-        return strategy_cls(db=db, llm_client=llm_client)
+        return strategy_cls(session_factory=session_factory, llm_client=llm_client)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

@@ -12,10 +12,33 @@ from tests.mocks.mock_llm_client import MockLLMClient
 PATCH_GET_FHIR = "src.core.strategies.naive_dump.strategy.get_all_fhir_by_patient"
 
 
+class _DummySessionCtx:
+    """Async context manager that returns a provided db object."""
+
+    def __init__(self, db):
+        self._db = db
+
+    async def __aenter__(self):
+        return self._db
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
 @pytest.fixture
 def mock_db():
     db = AsyncMock()
     return db
+
+
+@pytest.fixture
+def mock_session_factory(mock_db):
+    """Mimic async_sessionmaker: callable returning an async context manager."""
+
+    def _factory():
+        return _DummySessionCtx(mock_db)
+
+    return _factory
 
 
 @pytest.fixture
@@ -29,8 +52,8 @@ def mock_llm():
 
 
 @pytest.fixture
-def strategy(mock_db, mock_llm):
-    return NaiveDumpStrategy(db=mock_db, llm_client=mock_llm)
+def strategy(mock_session_factory, mock_llm):
+    return NaiveDumpStrategy(session_factory=mock_session_factory, llm_client=mock_llm)
 
 
 @pytest.mark.asyncio
@@ -106,7 +129,10 @@ async def test_catches_llm_errors_and_returns_query_result_with_error(strategy):
         model_id="mock",
         response_text="not valid json",  # will fail model_validate_json
     )
-    strategy_bad = NaiveDumpStrategy(db=strategy.db, llm_client=failing_llm)
+    strategy_bad = NaiveDumpStrategy(
+        session_factory=strategy.session_factory,
+        llm_client=failing_llm,
+    )
 
     with patch(PATCH_GET_FHIR, side_effect=mock_get_all):
         ctx = QueryContext(

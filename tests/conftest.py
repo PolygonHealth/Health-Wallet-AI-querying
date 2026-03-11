@@ -34,47 +34,6 @@ def _register_mock_llm():
     )
 
 
-def _register_agentic_mock_llm():
-    """Register agentic-mock: MockGeminiForAgentic for agentic strategy integration tests."""
-    from src.llm import client_factory
-    from src.llm.base_client import FinishReason, LLMUsage
-    from src.llm.providers.gemini import ToolCallResponse
-    from tests.mocks.mock_gemini_for_agentic import MockGeminiForAgentic
-
-    def _factory(model_id: str):
-        return MockGeminiForAgentic(
-            model_id=model_id,
-            responses=[
-                ToolCallResponse(
-                    text="",
-                    function_calls=[{"id": "1", "name": "get_patient_overview", "args": {}}],
-                    usage=LLMUsage(input_tokens=50, output_tokens=5),
-                    finish_reason=FinishReason.STOP,
-                ),
-                ToolCallResponse(
-                    text="",
-                    function_calls=[
-                        {
-                            "id": "2",
-                            "name": "get_resources_by_type",
-                            "args": {"resource_type": "Condition"},
-                        },
-                    ],
-                    usage=LLMUsage(input_tokens=100, output_tokens=10),
-                    finish_reason=FinishReason.STOP,
-                ),
-                ToolCallResponse(
-                    text="Based on the data, the patient has hypertension.",
-                    function_calls=[],
-                    usage=LLMUsage(input_tokens=150, output_tokens=15),
-                    finish_reason=FinishReason.STOP,
-                ),
-            ],
-        )
-
-    client_factory._MODEL_REGISTRY["agentic-mock"] = (_factory, "agentic-mock")
-
-
 def _register_langgraph_mock_llm():
     """Register langgraph-mock: MockLangChainLLM for LangGraph strategy integration tests."""
     from src.llm.provider import register_llm_override
@@ -88,7 +47,6 @@ def _register_langgraph_mock_llm():
 
 _ensure_core_loaded()
 _register_mock_llm()
-_register_agentic_mock_llm()
 _register_langgraph_mock_llm()
 
 
@@ -101,8 +59,13 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 
 @pytest.fixture(scope="session")
 def postgres_container() -> Generator[PostgresContainer, None, None]:
-    with PostgresContainer("postgres:16-alpine", driver="asyncpg") as container:
-        yield container
+    try:
+        with PostgresContainer("postgres:16-alpine", driver="asyncpg") as container:
+            yield container
+    except Exception as e:
+        # In some environments (e.g. sandboxed CI) Docker is unavailable.
+        # Skip integration tests that require testcontainers instead of erroring.
+        pytest.skip(f"Docker unavailable for testcontainers: {e}")
 
 
 @pytest.fixture(scope="session")
@@ -110,24 +73,20 @@ def database_url(postgres_container: PostgresContainer) -> str:
     return postgres_container.get_connection_url(driver="asyncpg")
 
 
-@pytest.fixture(scope="session")
-def test_engine(database_url: str):
-    return create_async_engine(database_url, pool_pre_ping=True)
-
-
-@pytest.fixture(scope="session")
-def test_session_factory(test_engine):
-    return async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
-
-
 @pytest.fixture
 async def db_session(
-    test_engine,
-    test_session_factory,
     database_url: str,
 ) -> AsyncGenerator[AsyncSession, None]:
-    """Create tables, seed data, yield session. Tables created once per engine."""
-    async with test_engine.begin() as conn:
+    """Create per-test engine, ensure schema, yield session, then dispose engine."""
+    engine = create_async_engine(database_url, pool_pre_ping=True)
+    session_factory = async_sessionmaker(
+        engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    # Ensure schema exists for this engine
+    async with engine.begin() as conn:
         await conn.execute(
             text("""
             CREATE TABLE IF NOT EXISTS fhir_resources (
@@ -150,9 +109,13 @@ async def db_session(
             )
         """)
         )
-    async with test_session_factory() as session:
-        yield session
-        await session.rollback()
+    async with session_factory() as session:
+        try:
+            yield session
+        finally:
+            await session.rollback()
+
+    await engine.dispose()
 
 
 @pytest.fixture
@@ -196,13 +159,13 @@ def app(database_url: str):
 
 
 @pytest.fixture
-async def async_client(app, db_session, test_session_factory):
-    """AsyncClient with overridden get_db. db_session creates tables."""
+async def async_client(app, db_session):
+    """AsyncClient with overridden get_db using per-test session."""
     from src.api.dependencies import get_db
 
     async def override_get_db():
-        async with test_session_factory() as session:
-            yield session
+        # Reuse the same AsyncSession for all requests in this test.
+        yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
     transport = ASGITransport(app=app)
@@ -212,13 +175,12 @@ async def async_client(app, db_session, test_session_factory):
 
 
 @pytest.fixture
-async def async_client_seeded(app, seeded_db, test_session_factory):
-    """AsyncClient with seeded DB."""
+async def async_client_seeded(app, seeded_db):
+    """AsyncClient with seeded DB, reusing the seeded session."""
     from src.api.dependencies import get_db
 
     async def override_get_db():
-        async with test_session_factory() as session:
-            yield session
+        yield seeded_db
 
     app.dependency_overrides[get_db] = override_get_db
     transport = ASGITransport(app=app)

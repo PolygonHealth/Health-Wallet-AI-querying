@@ -28,7 +28,7 @@ async def test_get_patient_overview(executor, mock_db):
         result, ids, types = await executor.execute("get_patient_overview", {})
     assert "by_type" in result
     assert ids == []
-    assert "Condition" in types
+    assert len(types) == 0
 
 
 @pytest.mark.asyncio

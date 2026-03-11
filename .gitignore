@@ -8,6 +8,7 @@ __pycache__/
 *.pyo
 env/
 venv/
+.venv/
 *.egg-info/
 .pytest_cache/
 .coverage
@@ -20,6 +21,11 @@ pytest.ini
 merge_code.py
 merged_code.txt
 fhir_benchmark_queries.csv
+fhir_benchmark_queries copy.csv
+langgraph.xlsx
+langgraph_tests.xlsx
+benchmark_test.py
+
 
 # React
 /build/

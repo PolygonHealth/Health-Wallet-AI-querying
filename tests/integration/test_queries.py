@@ -10,7 +10,7 @@ async def test_get_all_fhir_by_patient_returns_correct_rows(seeded_db):
     rows = await get_all_fhir_by_patient(seeded_db, "patient-1")
     assert len(rows) >= 2
     for r in rows:
-        assert "id" in r
+        assert "resource_id" in r
         assert "resource_type" in r
         assert "resource" in r
         assert "received_at" in r

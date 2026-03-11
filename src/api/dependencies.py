@@ -1,9 +1,9 @@
 from collections.abc import AsyncGenerator
 
 from fastapi import HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.db.session import get_db as _get_db
+from src.db.session import async_session_factory, get_db as _get_db
 from src.core.strategy_registry import get_strategy_class
 from src.llm.client_factory import create_llm_client
 from src.llm.provider import create_llm
@@ -12,6 +12,11 @@ from src.llm.provider import create_llm
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async for session in _get_db():
         yield session
+
+
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Expose async_session_factory for components that manage their own sessions (e.g., BenchmarkRunner)."""
+    return async_session_factory
 
 
 def resolve_strategy(

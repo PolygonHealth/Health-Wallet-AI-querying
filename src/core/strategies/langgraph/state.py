@@ -19,3 +19,5 @@ class ConversationState(TypedDict, total=False):
     turn_count: int
     budget_exceeded: bool
     final_answer: str | None
+    tokens_in: int = 0
+    tokens_out: int = 0

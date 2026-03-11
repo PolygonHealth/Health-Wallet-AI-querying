@@ -37,12 +37,13 @@ _LIMIT_PATTERN = re.compile(r"\blimit\s+(\d+)\b", re.IGNORECASE)
 # Require :pid for parameterized patient scoping
 _PID_REQUIRED = re.compile(r":pid\b")
 
+# At the top with your other patterns
+_JSONB_ARROW_BEFORE_STRING_OP = re.compile(
+    r"->'[^']+'\s+(ILIKE|LIKE|NOT\s+LIKE|NOT\s+ILIKE|=|!=|<>|IN)\s+",
+    re.IGNORECASE,
+)
 
 def validate_sql(sql: str) -> str:
-    """
-    Validate LLM-generated SQL. Returns validated SQL or raises SQLValidationError.
-    patient_id must be passed as :pid parameter when executing — never interpolated.
-    """
     sql = sql.strip()
     if not sql:
         raise SQLValidationError("SQL cannot be empty.")
@@ -51,6 +52,15 @@ def validate_sql(sql: str) -> str:
     if _FORBIDDEN_RE.search(sql):
         raise SQLValidationError(
             "SQL contains forbidden operation (DELETE, DROP, INSERT, UPDATE, ALTER, TRUNCATE, etc.). Only SELECT is allowed."
+        )
+
+    # JSONB operator check — catch -> where ->> is needed
+    if _JSONB_ARROW_BEFORE_STRING_OP.search(sql):
+        raise SQLValidationError(
+            "JSONB operator error: the -> operator returns JSONB, not TEXT. "
+            "Use ->> (not ->) for the final key when comparing with ILIKE, LIKE, =, IN. "
+            "WRONG: resource->'code'->'text' ILIKE '%foo%'  "
+            "RIGHT: resource->'code'->>'text' ILIKE '%foo%'"
         )
 
     # Require :pid for patient scoping
@@ -74,7 +84,6 @@ def validate_sql(sql: str) -> str:
         if limit_val > SQL_MAX_ROWS:
             sql = _LIMIT_PATTERN.sub(f"LIMIT {SQL_MAX_ROWS}", sql, count=1)
     else:
-        # Add LIMIT if missing (append before semicolon or at end)
         if sql.rstrip().endswith(";"):
             sql = sql.rstrip()[:-1] + f" LIMIT {SQL_MAX_ROWS};"
         else:

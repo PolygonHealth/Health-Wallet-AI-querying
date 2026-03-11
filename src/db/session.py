@@ -4,9 +4,10 @@ from src.config.settings import settings
 
 engine = create_async_engine(
     settings.DATABASE_URL,
-    pool_size=20,
+    pool_size=10,
     pool_pre_ping=True,
 )
+
 async_session_factory = async_sessionmaker(
     engine,
     class_=AsyncSession,

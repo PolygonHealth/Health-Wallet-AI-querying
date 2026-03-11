@@ -1,5 +1,6 @@
 """LanggraphStrategy — LangGraph with classify, llm+tools loop, synthesize."""
 
+from datetime import datetime
 import logging
 import time
 
@@ -8,7 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.core.models import QueryContext, QueryResult
 from src.core.strategy_registry import register_strategy
@@ -27,8 +28,8 @@ logger = logging.getLogger(__name__)
 class LanggraphStrategy:
     """LangGraph strategy: BaseChatModel, ToolNode, add_messages state."""
 
-    def __init__(self, db: AsyncSession, llm: BaseChatModel) -> None:
-        self.db = db
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession], llm: BaseChatModel) -> None:
+        self.session_factory = session_factory
         self.llm = llm
         self._checkpointer = MemorySaver()
 
@@ -36,9 +37,13 @@ class LanggraphStrategy:
     def name(self) -> str:
         return "langgraph"
 
-    def _build_graph(self, context: QueryContext):
+    def _build_graph(
+        self, context: QueryContext, resource_types_collector: set[str] | None = None
+    ):
         """Build graph per execute. Tools use context.patient_id."""
-        tools = create_fhir_tools(self.db, context.patient_id)
+        tools = create_fhir_tools(
+            self.session_factory, context.patient_id, resource_types_collector=resource_types_collector
+        )
         tool_node = ToolNode(tools)
         llm_with_tools = self.llm.bind_tools(tools)
 
@@ -47,9 +52,20 @@ class LanggraphStrategy:
 
         async def llm_node(state: ConversationState) -> dict:
             response = await llm_with_tools.ainvoke(state["messages"])
+
+            # Extract token usage from response metadata
+            delta_in = 0
+            delta_out = 0
+            usage = getattr(response, "usage_metadata", None)
+            if usage:
+                delta_in = usage.get("input_tokens", 0)
+                delta_out = usage.get("output_tokens", 0)
+
             return {
                 "messages": [response],
                 "turn_count": state.get("turn_count", 0) + 1,
+                "tokens_in": state.get("tokens_in", 0) + delta_in,
+                "tokens_out": state.get("tokens_out", 0) + delta_out,
             }
 
         builder = StateGraph(ConversationState)
@@ -67,10 +83,13 @@ class LanggraphStrategy:
     async def execute(self, context: QueryContext) -> QueryResult:
         try:
             t0 = time.perf_counter()
-            graph = self._build_graph(context)
+            resource_types_collector: set[str] = set()
+            graph = self._build_graph(context, resource_types_collector)
 
             initial_messages = [
-                SystemMessage(content=SYSTEM_PROMPT),
+                SystemMessage(content=SYSTEM_PROMPT.format(
+                    current_date=datetime.now().strftime('%B %d, %Y')
+                )),
                 HumanMessage(content=context.query_text),
             ]
             initial_state: ConversationState = {
@@ -80,6 +99,8 @@ class LanggraphStrategy:
                 "query_intent": "",
                 "budget_exceeded": False,
                 "final_answer": None,
+                "tokens_in": 0,
+                "tokens_out": 0,
             }
 
             thread_id = f"patient-{context.patient_id}"
@@ -103,6 +124,9 @@ class LanggraphStrategy:
                 model_used=model_id,
                 strategy_used=self.name,
                 latency_ms=latency_ms,
+                tokens_in=final_state.get("tokens_in", 0),
+                tokens_out=final_state.get("tokens_out", 0),
+                resource_types=sorted(resource_types_collector),
             )
 
         except Exception as e:
@@ -116,4 +140,5 @@ class LanggraphStrategy:
                 response_text="",
                 resource_ids=[],
                 error=str(e),
+                resource_types=[],
             )

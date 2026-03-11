@@ -60,7 +60,7 @@ def _extract_text(message: AIMessage) -> str:
 def create_synthesize_node(llm: BaseChatModel):
     """Factory: returns async node that produces final_answer + resource_ids."""
 
-    structured_llm = llm.with_structured_output(SynthesizedAnswer)
+    structured_llm = llm.with_structured_output(SynthesizedAnswer, include_raw=True)
 
     async def synthesize_node(state: ConversationState) -> dict:
         messages = list(state.get("messages") or [])
@@ -85,21 +85,29 @@ def create_synthesize_node(llm: BaseChatModel):
             return await structured_llm.ainvoke(combined)
 
         try:
-            result: SynthesizedAnswer = await retry_llm_call(
+            raw_result: SynthesizedAnswer = await retry_llm_call(
                 _call, call_description="langgraph_synthesize"
             )
+            result = raw_result['parsed']
+            raw_message = raw_result['raw'] # AIMessage with usage_metadata
+
             final_answer = result.answer
             resource_ids = result.resource_ids
+
+            # Extract synthesis token usage if available
+            usage = getattr(raw_result, "usage_metadata", None) or {}
+            synth_in = usage.get("input_tokens", 0)
+            synth_out = usage.get("output_tokens", 0)
         except Exception as e:
             logger.warning(
                 "structured_synthesize_failed | falling_back_to_text | error=%s",
                 str(e),
             )
-            # Fallback: use the last AI text answer, no resource IDs
             final_answer = last_ai_text
             resource_ids = []
+            synth_in = 0
+            synth_out = 0
 
-        # Deduplicate while preserving order
         resource_ids = list(dict.fromkeys(resource_ids))
 
         logger.info(
@@ -111,6 +119,7 @@ def create_synthesize_node(llm: BaseChatModel):
         return {
             "final_answer": final_answer or "I could not generate an answer.",
             "resource_ids": resource_ids,
+            "tokens_in": state.get("tokens_in", 0) + synth_in,
+            "tokens_out": state.get("tokens_out", 0) + synth_out,
         }
-
     return synthesize_node

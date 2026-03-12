@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -20,4 +20,5 @@ class QueryResult:
     tokens_in: int = 0
     tokens_out: int = 0
     latency_ms: float = 0.0
+    resource_types: list[str] = field(default_factory=list)
     error: str | None = None

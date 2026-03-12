@@ -20,6 +20,9 @@ dependencies = [
   "langgraph>=0.2",
   "langgraph-checkpoint>=2",
   "langchain-core>=0.3",
+  "langchain-google-genai",
+  "langchain-openai",
+  "langchain-anthropic",
 ]
 
 [project.optional-dependencies]
@@ -34,4 +37,5 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+testpaths = ["tests"]
 

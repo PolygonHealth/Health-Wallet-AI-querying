@@ -12,7 +12,7 @@ async def get_all_fhir_by_patient(db: AsyncSession, patient_id: str) -> list[dic
     result = await db.execute(
         text(
             """
-            SELECT id, resource_type, resource, received_at
+            SELECT id AS resource_id, resource_type, resource, received_at
             FROM fhir_resources
             WHERE patient_id = :pid
             ORDER BY received_at
@@ -22,7 +22,7 @@ async def get_all_fhir_by_patient(db: AsyncSession, patient_id: str) -> list[dic
     )
     rows = [
         {
-            "id": str(r.id),
+            "resource_id": str(r.resource_id),
             "resource_type": r.resource_type,
             "resource": r.resource,
             "received_at": str(r.received_at) if r.received_at else "",
@@ -81,31 +81,41 @@ async def get_fhir_by_type(
     """Fetch FHIR resources for a patient filtered by type (e.g., 'Condition', 'Observation')."""
 
     logger.info("fhir_query | patient_id=%s | filter=%s | limit=%d", patient_id, resource_type, limit)
-    result = await db.execute(
-        text(
-            """
-            SELECT id, resource_type, resource, received_at
-            FROM fhir_resources
-            WHERE patient_id = :pid AND resource_type = :rt
-            ORDER BY received_at
-            LIMIT :lim
-            """
-        ),
-        {"pid": patient_id, "rt": resource_type, "lim": limit},
-    )
-    rows = [
+    try:
+        async with db.begin_nested():
+            result = await db.execute(
+                text(
+                    """
+                    SELECT id AS resource_id, resource_type, resource, received_at
+                    FROM fhir_resources
+                    WHERE patient_id = :pid AND resource_type = :rt
+                    ORDER BY received_at
+                    LIMIT :lim
+                    """
+                ),
+                {"pid": patient_id, "rt": resource_type, "lim": limit},
+            )
+            rows = result.fetchall()
+    except Exception as e:
+        logger.warning(
+            "fhir_query_failed | patient_id=%s | filter=%s | error=%s",
+            patient_id, resource_type, str(e),
+        )
+        raise
+
+    out = [
         {
-            "id": str(r.id),
+            "resource_id": str(r.resource_id),
             "resource_type": r.resource_type,
             "resource": r.resource,
             "received_at": str(r.received_at) if r.received_at else "",
         }
-        for r in result.fetchall()
+        for r in rows
     ]
     logger.info(
-        "fhir_query_complete | patient_id=%s | row_count=%d", patient_id, len(rows)
+        "fhir_query_complete | patient_id=%s | row_count=%d", patient_id, len(out)
     )
-    return rows
+    return out
 
 
 async def search_resources_by_keyword(
@@ -118,31 +128,41 @@ async def search_resources_by_keyword(
 
     logger.info("fhir_search | patient_id=%s | keyword=%s | limit=%d", patient_id, keyword, limit)
     pattern = f"%{keyword}%"
-    result = await db.execute(
-        text(
-            """
-            SELECT id, resource_type, resource, received_at
-            FROM fhir_resources
-            WHERE patient_id = :pid AND resource::text ILIKE :pat
-            ORDER BY received_at
-            LIMIT :lim
-            """
-        ),
-        {"pid": patient_id, "pat": pattern, "lim": limit},
-    )
-    rows = [
+    try:
+        async with db.begin_nested():
+            result = await db.execute(
+                text(
+                    """
+                    SELECT id AS resource_id, resource_type, resource, received_at
+                    FROM fhir_resources
+                    WHERE patient_id = :pid AND resource::text ILIKE :pat
+                    ORDER BY received_at
+                    LIMIT :lim
+                    """
+                ),
+                {"pid": patient_id, "pat": pattern, "lim": limit},
+            )
+            rows = result.fetchall()
+    except Exception as e:
+        logger.warning(
+            "fhir_search_failed | patient_id=%s | keyword=%s | error=%s",
+            patient_id, keyword, str(e),
+        )
+        raise
+
+    out = [
         {
-            "id": str(r.id),
+            "resource_id": str(r.resource_id),
             "resource_type": r.resource_type,
             "resource": r.resource,
             "received_at": str(r.received_at) if r.received_at else "",
         }
-        for r in result.fetchall()
+        for r in rows
     ]
     logger.info(
-        "fhir_search_complete | patient_id=%s | row_count=%d", patient_id, len(rows)
+        "fhir_search_complete | patient_id=%s | row_count=%d", patient_id, len(out)
     )
-    return rows
+    return out
 
 
 async def execute_raw_sql(
@@ -150,12 +170,16 @@ async def execute_raw_sql(
     sql: str,
     params: dict,
 ) -> list[dict]:
-    """Execute validated SQL with bound parameters. Used by agentic execute_sql tool."""
+    """Execute validated SQL with bound parameters."""
+    logger.info("sql_execute | sql_preview=%s", sql)
+    try:
+        async with db.begin_nested():
+            result = await db.execute(text(sql), params)
+            rows = result.fetchall()
+    except Exception as e:
+        logger.warning("sql_execute_failed | error=%s | sql=%s", str(e), sql)
+        raise
 
-    logger.info("sql_execute | sql_preview=%s", sql[:200] if len(sql) > 200 else sql)
-    result = await db.execute(text(sql), params)
-    rows = result.fetchall()
-    # Convert to list of dicts; serialize UUID/datetime for JSON
     out = []
     for r in rows:
         d = dict(r._mapping)
@@ -168,7 +192,7 @@ async def execute_raw_sql(
     return out
 
 
-async def get_schema_info(db: AsyncSession) -> dict:
+async def get_fhir_resources_schema_info(db: AsyncSession) -> dict:
     """Return column names and types for fhir_resources and fhir_note_text."""
 
     result = await db.execute(
@@ -177,7 +201,7 @@ async def get_schema_info(db: AsyncSession) -> dict:
             SELECT table_name, column_name, data_type
             FROM information_schema.columns
             WHERE table_schema = 'public'
-            AND table_name IN ('fhir_resources', 'fhir_note_text')
+            AND table_name IN ('fhir_resources')
             ORDER BY table_name, ordinal_position
             """
         ),

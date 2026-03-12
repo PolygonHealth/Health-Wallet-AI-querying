@@ -25,24 +25,28 @@ async def test_get_patient_overview(executor, mock_db):
         new_callable=AsyncMock,
         return_value=mock_data,
     ):
-        result, ids = await executor.execute("get_patient_overview", {})
+        result, ids, types = await executor.execute("get_patient_overview", {})
     assert "by_type" in result
     assert ids == []
+    assert len(types) == 0
 
 
 @pytest.mark.asyncio
 async def test_get_resources_by_type(executor, mock_db):
     rows = [
-        {"id": "r1", "resource_type": "Condition", "resource": {}, "received_at": ""},
+        {"resource_id": "r1", "resource_type": "Condition", "resource": {}, "received_at": ""},
     ]
     with patch(
         "src.core.strategies.utils.tool_executor.get_fhir_by_type",
         new_callable=AsyncMock,
         return_value=rows,
     ):
-        result, ids = await executor.execute("get_resources_by_type", {"resource_type": "Condition"})
+        result, ids, types = await executor.execute(
+            "get_resources_by_type", {"resource_type": "Condition"}
+        )
     assert "r1" in ids
     assert "resources" in result
+    assert types == ["Condition"]
 
 
 @pytest.mark.asyncio
@@ -53,21 +57,26 @@ async def test_execute_sql_validation_error(executor):
         "src.core.strategies.utils.tool_executor.validate_sql",
         side_effect=SQLValidationError("SQL must use :pid"),
     ):
-        result, ids = await executor.execute("execute_sql", {"sql": "SELECT * FROM x"})
+        result, ids, types = await executor.execute("execute_sql", {"sql": "SELECT * FROM x"})
     assert "error" in result
     assert ids == []
+    assert types == []
 
 
 @pytest.mark.asyncio
 async def test_unknown_tool_returns_error(executor):
-    result, ids = await executor.execute("unknown_tool", {})
+    result, ids, types = await executor.execute("unknown_tool", {})
     assert "error" in result
     assert "Unknown tool" in result
     assert ids == []
+    assert types == []
 
 
 @pytest.mark.asyncio
 async def test_finish_with_answer(executor):
-    result, ids = await executor.execute("finish_with_answer", {"answer": "The patient has hypertension."})
+    result, ids, types = await executor.execute(
+        "finish_with_answer", {"answer": "The patient has hypertension."}
+    )
     assert "acknowledged" in result
     assert ids == []
+    assert types == []

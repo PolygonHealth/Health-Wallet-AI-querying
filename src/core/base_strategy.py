@@ -1,15 +1,15 @@
 import logging
 from abc import ABC, abstractmethod
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.llm.base_client import BaseLLMClient
 from src.core.models import QueryContext, QueryResult
 
 
 class BaseStrategy(ABC):
-    def __init__(self, db: AsyncSession, llm_client: BaseLLMClient) -> None:
-        self.db = db
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession], llm_client: BaseLLMClient) -> None:
+        self.session_factory = session_factory
         self.llm_client = llm_client
         self.logger = logging.getLogger(type(self).__name__)
 

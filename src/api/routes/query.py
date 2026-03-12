@@ -2,10 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import src.core  # noqa: F401 - triggers strategy registration
-from src.api.dependencies import get_db, resolve_strategy
+from src.api.dependencies import get_session_factory, resolve_strategy
 from src.config.settings import settings
 from src.core.models import QueryContext
-from src.llm.client_factory import create_llm_client
 
 router = APIRouter()
 
@@ -25,6 +24,7 @@ class QueryResponse(BaseModel):
     tokens_in: int
     tokens_out: int
     latency_ms: float
+    resource_types: list[str]
     error: str | None = None
 
     @classmethod
@@ -37,6 +37,7 @@ class QueryResponse(BaseModel):
             tokens_in=result.tokens_in,
             tokens_out=result.tokens_out,
             latency_ms=result.latency_ms,
+            resource_types=getattr(result, "resource_types", []) or [],
             error=result.error,
         )
 
@@ -44,16 +45,11 @@ class QueryResponse(BaseModel):
 @router.post("/query", response_model=QueryResponse)
 async def run_query(
     req: QueryRequest,
-    db=Depends(get_db),
+    session_factory=Depends(get_session_factory),
 ):
     strategy_name = req.strategy or settings.DEFAULT_STRATEGY
     model_name = req.model or settings.DEFAULT_MODEL
-    try:
-        llm_client = create_llm_client(model_name)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    strategy = resolve_strategy(strategy_name, db, llm_client)
+    strategy = resolve_strategy(strategy_name, session_factory, model_name)
     context = QueryContext(
         patient_id=req.patient_id,
         query_text=req.query,

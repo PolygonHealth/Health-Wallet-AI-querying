@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
     GEMINI_API_KEY: str
-    DEFAULT_STRATEGY: str = "naive_dump"
+    DEFAULT_STRATEGY: str = "langgraph"
     DEFAULT_MODEL: str = "gemini-3.0-flash"
     LOG_LEVEL: str = "INFO"
 

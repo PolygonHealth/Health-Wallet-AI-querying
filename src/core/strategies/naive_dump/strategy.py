@@ -30,7 +30,8 @@ class NaiveDumpStrategy(BaseStrategy):
 
     async def execute(self, context: QueryContext) -> QueryResult:
         try:
-            resources = await get_all_fhir_by_patient(self.db, context.patient_id)
+            async with self.session_factory() as db:
+                resources = await get_all_fhir_by_patient(db, context.patient_id)
             prompt = self._build_prompt(context.query_text, resources)
 
             self.logger.info(

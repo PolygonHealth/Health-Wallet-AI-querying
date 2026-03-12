@@ -1,40 +1,32 @@
-"""Edge routing functions for LangGraph."""
+"""Edge routing for LangGraph. Two routes: after classify and after llm."""
+
+from langchain_core.messages import AIMessage
 
 from src.core.strategies.langgraph.state import (
     QUERY_INTENT_IRRELEVANT,
     QUERY_INTENT_NEEDS_CLARIFICATION,
     ConversationState,
 )
-
-
-def _last_message_has_function_calls(state: ConversationState) -> bool:
-    """Check if last message has any function_call parts."""
-    messages = state.get("messages", [])
-    if not messages:
-        return False
-    for p in messages[-1].get("parts", []):
-        if "function_call" in p:
-            return True
-    return False
+from src.core.strategies.utils.constants import MAX_TURNS
 
 
 def route_after_classify(state: ConversationState) -> str:
-    """Route after classify: decline or call_tools."""
+    """Route after classify: decline or llm."""
     intent = state.get("query_intent", "relevant")
     if intent in (QUERY_INTENT_IRRELEVANT, QUERY_INTENT_NEEDS_CLARIFICATION):
         return "decline"
-    return "call_tools"
+    return "llm"
 
 
-def route_after_call_tools(state: ConversationState) -> str:
-    """Route after call_tools: execute_tools or synthesize."""
-    if _last_message_has_function_calls(state):
-        return "execute_tools"
-    return "synthesize"
-
-
-def route_after_execute_tools(state: ConversationState) -> str:
-    """Route after execute_tools: call_tools (loop) or synthesize."""
-    if state.get("budget_exceeded", False):
+def route_after_llm(state: ConversationState) -> str:
+    """Route after llm_node: tools or synthesize. Go to tools if last AIMessage has tool_calls and turn_count < MAX_TURNS."""
+    messages = state.get("messages") or []
+    turn_count = state.get("turn_count", 0)
+    if turn_count >= MAX_TURNS:
         return "synthesize"
-    return "call_tools"
+    if not messages:
+        return "synthesize"
+    last = messages[-1]
+    if isinstance(last, AIMessage) and last.tool_calls:
+        return "tools"
+    return "synthesize"

@@ -1,15 +1,18 @@
+"""Classify node: determine query intent using structured LLM output."""
+
 import logging
 from typing import Literal
 
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel
 
-from src.core.models import QueryContext
 from src.core.strategies.langgraph.prompts import CLASSIFY_PROMPT
-from src.core.strategies.utils.retry import retry_llm_call
 from src.core.strategies.langgraph.state import (
     QUERY_INTENT_RELEVANT,
     ConversationState,
 )
+from src.core.strategies.utils.retry import retry_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -21,20 +24,19 @@ class ClassifyResult(BaseModel):
     reason: str
 
 
-def _format_messages_for_classify(messages: list[dict]) -> str:
+def _format_messages_for_classify(messages: list[BaseMessage]) -> str:
     """Format state messages as readable text for classify prompt."""
-
     lines: list[str] = []
     for m in messages:
-        role = m.get("role", "user")
-        for p in m.get("parts", []):
-            if "text" in p:
-                lines.append(f"{role.capitalize()}: {p['text']}")
+        role = "user" if isinstance(m, HumanMessage) else "assistant"
+        content = getattr(m, "content", None)
+        if isinstance(content, str) and content.strip():
+            lines.append(f"{role.capitalize()}: {content}")
     return "\n".join(lines) if lines else "(no messages)"
 
 
-def create_classify_node(llm_client, context: QueryContext):
-    """Factory: returns async node that classifies query intent."""
+def create_classify_node(llm: BaseChatModel):
+    """Factory: returns async node that classifies query intent using structured output."""
 
     async def classify_node(state: ConversationState) -> dict:
         messages = state.get("messages", [])
@@ -44,16 +46,12 @@ def create_classify_node(llm_client, context: QueryContext):
         intent = QUERY_INTENT_RELEVANT  # default: fail open
 
         try:
-            async def _call():
-                return await llm_client.complete(
-                    prompt=prompt,
-                    max_tokens=1000,
-                    temperature=0.0,
-                    response_schema=ClassifyResult,
-                )
+            structured_llm = llm.with_structured_output(ClassifyResult)
 
-            resp = await retry_llm_call(_call, call_description="langgraph_classify")
-            result = ClassifyResult.model_validate_json(resp.response)
+            async def _call():
+                return await structured_llm.ainvoke([HumanMessage(content=prompt)])
+
+            result = await retry_llm_call(_call, call_description="langgraph_classify")
             intent = result.intent
 
             logger.info(

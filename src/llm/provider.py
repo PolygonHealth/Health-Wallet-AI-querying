@@ -15,6 +15,9 @@ def register_llm_override(model_id: str, factory: Callable[[], BaseChatModel]) -
     _LLM_OVERRIDES[model_id] = factory
 
 
+# Cache: model_id -> BaseChatModel
+_llm_cache: dict[str, BaseChatModel] = {}
+
 def create_llm(
     model_id: str | None = None,
     temperature: float = 0.0,
@@ -31,36 +34,18 @@ def create_llm(
     if model_id in _LLM_OVERRIDES:
         return _LLM_OVERRIDES[model_id]()
 
-    if model_id.startswith("gemini"):
-        from langchain_google_genai import ChatGoogleGenerativeAI
+    cache_key = model_id
+    if cache_key not in _llm_cache:
+        if model_id.startswith("gemini"):
+            from langchain_google_genai import ChatGoogleGenerativeAI
 
-        return ChatGoogleGenerativeAI(
-            model=model_id,
-            google_api_key=settings.GEMINI_API_KEY,
-            temperature=temperature,
-            max_output_tokens=max_output_tokens,
-        )
-
-    if model_id.startswith("claude"):
-        from langchain_anthropic import ChatAnthropic
-
-        api_key = getattr(settings, "ANTHROPIC_API_KEY", "") or ""
-        return ChatAnthropic(
-            model=model_id,
-            api_key=api_key,
-            temperature=temperature,
-            max_tokens=max_output_tokens,
-        )
-
-    if model_id.startswith("gpt"):
-        from langchain_openai import ChatOpenAI
-
-        api_key = getattr(settings, "OPENAI_API_KEY", "") or ""
-        return ChatOpenAI(
-            model=model_id,
-            api_key=api_key,
-            temperature=temperature,
-            max_tokens=max_output_tokens,
-        )
-
-    raise ValueError(f"Unknown model prefix: {model_id}")
+            _llm_cache[cache_key] = ChatGoogleGenerativeAI(
+                model=model_id,
+                google_api_key=settings.GEMINI_API_KEY,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+            )
+        else:
+            raise ValueError(f"Unknown model prefix: {model_id}")
+    
+    return _llm_cache[cache_key]

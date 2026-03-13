@@ -59,7 +59,7 @@ async def test_langgraph_strategy_execute_returns_query_result():
     mock_executor.execute = AsyncMock(return_value=('{"resources": [], "count": 0}', []))
 
     with patch(
-        "src.core.strategies.langgraph.strategy.create_fhir_tools",
+        "src.core.strategies.langgraph.tools.create_fhir_tools",
         return_value=[],  # No tools - LLM will return final answer on first call
     ):
         # Use mock that returns final answer immediately (no tool calls) to avoid DB

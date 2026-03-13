@@ -7,7 +7,7 @@ import pytest
 async def test_langgraph_strategy_returns_200_with_tool_calls(async_client_seeded):
     """Full langgraph loop: classify -> call_tools -> execute_tools -> synthesize."""
     resp = await async_client_seeded.post(
-        "/api/v1/query",
+        "/api/fhir/query",
         json={
             "patient_id": "patient-1",
             "query": "What conditions do I have?",
@@ -29,7 +29,7 @@ async def test_langgraph_strategy_returns_200_with_tool_calls(async_client_seede
 async def test_langgraph_patient_scoping(async_client_seeded):
     """Tools only return data for the requested patient."""
     resp = await async_client_seeded.post(
-        "/api/v1/query",
+        "/api/fhir/query",
         json={
             "patient_id": "patient-2",
             "query": "What conditions do I have?",

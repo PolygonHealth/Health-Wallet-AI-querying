@@ -129,7 +129,7 @@ class ToolExecutor:
 
         if tool_name == "finish_with_answer":
             answer = args.get("answer", "")
-            ids = args.get("resource_ids", [])
-            return {"answer": answer, "resource_ids": ids, "resource_types": types}, ids, types
+            ids = args.get("resource_ids") or []
+            return {"acknowledged": True, "answer": answer, "resource_ids": ids, "resource_types": []}, ids, []
 
         return {"error": f"Unknown tool: {tool_name}"}, [], []

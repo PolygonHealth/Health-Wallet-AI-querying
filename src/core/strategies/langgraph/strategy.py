@@ -47,7 +47,7 @@ class LanggraphStrategy:
         tool_node = ToolNode(tools)
         llm_with_tools = self.llm.bind_tools(tools)
 
-        classify_n = create_classify_node(self.llm)
+        #classify_n = create_classify_node(self.llm)
         synthesize_n = create_synthesize_node(self.llm)
 
         async def llm_node(state: ConversationState) -> dict:

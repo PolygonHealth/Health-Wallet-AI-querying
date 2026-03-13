@@ -1,11 +1,12 @@
-"""LanggraphStrategy — LangGraph with classify, llm+tools loop, synthesize."""
+"""LanggraphStrategy — LangGraph with llm+tools loop. No synthesize node; finish_with_answer ends."""
 
-from datetime import datetime
+import json
 import logging
 import time
+from datetime import datetime
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode
@@ -13,10 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.core.models import QueryContext, QueryResult
 from src.core.strategy_registry import register_strategy
-from src.core.strategies.langgraph.edges import route_after_classify, route_after_llm
-from src.core.strategies.langgraph.nodes.classify import create_classify_node
-from src.core.strategies.langgraph.nodes.decline import decline_node
-from src.core.strategies.langgraph.nodes.synthesize import create_synthesize_node
+from src.core.strategies.langgraph.edges import route_after_llm
 from src.core.strategies.langgraph.state import ConversationState
 from src.core.strategies.langgraph.tools import create_fhir_tools
 from src.core.strategies.utils.prompts import SYSTEM_PROMPT
@@ -47,9 +45,6 @@ class LanggraphStrategy:
         tool_node = ToolNode(tools)
         llm_with_tools = self.llm.bind_tools(tools)
 
-        #classify_n = create_classify_node(self.llm)
-        synthesize_n = create_synthesize_node(self.llm)
-
         async def llm_node(state: ConversationState) -> dict:
             response = await llm_with_tools.ainvoke(state["messages"])
 
@@ -71,12 +66,10 @@ class LanggraphStrategy:
         builder = StateGraph(ConversationState)
         builder.add_node("llm", llm_node)
         builder.add_node("tools", tool_node)
-        builder.add_node("synthesize", synthesize_n)
 
         builder.add_edge("__start__", "llm")
-        builder.add_conditional_edges("llm", route_after_llm)
         builder.add_edge("tools", "llm")  # tools -> llm (loop)
-        builder.add_edge("synthesize", "__end__")
+        builder.add_conditional_edges("llm", route_after_llm) # check number of turns < MAX_TURNS
 
         return builder.compile(checkpointer=self._checkpointer)
 
@@ -107,9 +100,8 @@ class LanggraphStrategy:
             config = {"configurable": {"thread_id": thread_id}}
 
             final_state = await graph.ainvoke(initial_state, config=config)
-
-            final_answer = final_state.get("final_answer") or "I could not generate an answer."
-            resource_ids = final_state.get("resource_ids", [])
+            messages = final_state.get("messages", [])
+            answer, resource_ids, _ = _extract_final_from_messages(messages)
             latency_ms = (time.perf_counter() - t0) * 1000
 
             model_id = getattr(self.llm, "model", None) or "unknown"
@@ -119,7 +111,7 @@ class LanggraphStrategy:
             )
 
             return QueryResult(
-                response_text=final_answer,
+                response_text=answer,
                 resource_ids=resource_ids,
                 model_used=model_id,
                 strategy_used=self.name,
@@ -142,3 +134,83 @@ class LanggraphStrategy:
                 error=str(e),
                 resource_types=[],
             )
+
+    def _extract_plain_text(self, content: str | list | dict | None) -> str:
+        """Extract plain text from content that may be Gemini block format [{'type':'text','text':'...'}] or plain str."""
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            s = content.strip()
+            if not s:
+                return ""
+            # Try parsing as JSON in case it's stringified list of blocks
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    parts = []
+                    for block in parsed:
+                        if isinstance(block, dict) and "text" in block:
+                            parts.append(str(block["text"]))
+                        elif isinstance(block, str):
+                            parts.append(block)
+                    return "\n".join(parts).strip() if parts else s
+            except (json.JSONDecodeError, TypeError):
+                pass
+            return s
+            
+        if isinstance(content, list):
+            parts = []
+            for block in content:
+                if isinstance(block, dict) and "text" in block:
+                    parts.append(str(block["text"]))
+                elif isinstance(block, str):
+                    parts.append(block)
+            return "\n".join(parts).strip()
+        if isinstance(content, dict) and "text" in content:
+            return str(content["text"]).strip()
+        return str(content).strip() if content else ""
+
+
+    def _extract_final_from_messages(self, messages: list[BaseMessage]) -> tuple[str, list[str], list[str]]:
+        """Extract final_answer, resource_ids, and resource_types from conversation messages."""
+        final_answer = ""
+        resource_ids: list[str] = []
+        resource_types: list[str] = []
+
+        for m in reversed(messages):
+            if hasattr(m, "name") and getattr(m, "name", None) == "finish_with_answer":
+                if hasattr(m, "content") and m.content:
+                    try:
+                        data = json.loads(m.content) if isinstance(m.content, str) else m.content
+                        if isinstance(data, dict):
+                            raw = data.get("answer", "")
+                            final_answer = self._extract_plain_text(raw)
+                            resource_ids = list(data.get("resource_ids") or [])
+                            resource_types = list(data.get("resource_types") or [])
+                            break
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+        if not final_answer:
+            for m in reversed(messages):
+                if hasattr(m, "content") and not (getattr(m, "tool_calls", None) or []):
+                    c = getattr(m, "content", None)
+                    final_answer = self._extract_plain_text(c)
+                    if final_answer:
+                        break
+
+        if not resource_ids:
+            for m in messages:
+                if hasattr(m, "content") and m.content:
+                    try:
+                        data = json.loads(m.content) if isinstance(m.content, str) else {}
+                        if isinstance(data, dict):
+                            for r in data.get("resources", data.get("rows", [])):
+                                if isinstance(r, dict) and r.get("resource_id"):
+                                    resource_ids.append(str(r["resource_id"]))
+                    except (json.JSONDecodeError, TypeError):
+                        pass
+
+        plain = self._extract_plain_text(final_answer).strip() or "Sorry, I could not generate an answer."
+        return plain, list(dict.fromkeys(resource_ids)), list(dict.fromkeys(resource_types))
+

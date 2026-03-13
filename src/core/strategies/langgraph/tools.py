@@ -15,21 +15,29 @@ def create_fhir_tools(
     """Return list of @tool-decorated functions for FHIR queries.
     If resource_types_collector is provided, resource types from each tool call are added to it."""
 
-    def _update_collector(types: list[str]) -> None:
+    def _update_resource_types_collector(types: list[str]) -> None:
         if resource_types_collector is not None and types:
             resource_types_collector.update(types)
 
     @tool
     async def get_patient_overview() -> str:
         """
-        ALWAYS call this FIRST. Returns a lightweight overview of the patient's data:
-        resource type counts and date ranges. No clinical content. Use this to decide
-        what to fetch next. 
+        Call this FIRST ONLY when the patient asks a question about their health records,
+        clinical data, or anything stored in FHIR (conditions, medications, labs, etc.)
+        AND you do not yet know what data exists for them.
+ 
+        Returns a lightweight summary of available resource types and date ranges —
+        no clinical content. Use it to plan which specific tools to call next.
+ 
+        DO NOT call this for greetings, small talk, or questions that don't require
+        FHIR data (e.g. "Hi", "Thanks", "What can you do?").
+ 
+        Example triggers:
+        - "What conditions do I have?" -> call this first to see if Condition data exists
+        - "Summarize my health" -> call this first to know what's available
+        - "Do I have any allergies?" -> call this first if you haven't fetched an overview yet
         
-        Example: if overview shows 5 Conditions and 10 Observations,
-        you can then fetch specific types.
-        
-        The underlying table is `fhir_resources` with columns:
+        The patient's FHIR data is stored in the `fhir_resources` table with columns:
         - id (UUID PK)
         - patient_id (UUID)
         - resource_type (TEXT)
@@ -42,8 +50,8 @@ def create_fhir_tools(
         """
         async with session_factory() as db:
             executor = ToolExecutor(db, patient_id)
-            result, _, types = await executor.execute("get_patient_overview", {})
-            _update_collector(types)
+            result, _, resource_types = await executor.execute("get_patient_overview", {})
+            _update_resource_types_collector(resource_types)
             return result
 
     @tool
@@ -59,7 +67,7 @@ def create_fhir_tools(
     ) -> str:
         """
         Fetch FHIR resources of a specific type for the patient. Use when you need ANY FHIR resource data 
-        (conditions, observations, medications, etc.). Prefer this over execute_sql. resource_type must be exact: 
+        (conditions, observations, medications, etc.). Prefer this over execute_sql. resource_type must be from FHIR Resource Types: 
         Condition, Observation, MedicationRequest, AllergyIntolerance, Procedure, etc. 
         
         Start with limit 5-10. Increase only if needed.
@@ -69,7 +77,7 @@ def create_fhir_tools(
             result, _, types = await executor.execute(
                 "get_resources_by_type", {"resource_type": resource_type, "limit": limit}
             )
-            _update_collector(types)
+            _update_resource_types_collector(types)
             return result
 
     @tool
@@ -92,7 +100,7 @@ def create_fhir_tools(
             result, _, types = await executor.execute(
                 "search_resources_by_keyword", {"keyword": keyword, "limit": limit}
             )
-            _update_collector(types)
+            _update_resource_types_collector(types)
             return result
 
     @tool(description=(
@@ -111,7 +119,7 @@ def create_fhir_tools(
         async with session_factory() as db:
             executor = ToolExecutor(db, patient_id)
             result, _, types = await executor.execute("execute_sql", {"sql": sql})
-            _update_collector(types)
+            _update_resource_types_collector(types)
             return result
 
     @tool
@@ -123,10 +131,28 @@ def create_fhir_tools(
             result, _, _ = await executor.execute("get_fhir_resources_schema_info", {})
         return result
 
+    @tool
+    async def finish_with_answer(
+        answer: Annotated[str, "Your final plain-English answer to the patient."],
+        resource_ids: Annotated[
+            list[str],
+            "FHIR resource_id UUIDs you cited. Only IDs you actually referenced.",
+        ] | None = None,
+    ) -> str:
+        """Call when you have enough data to answer. Stops the loop."""
+        async with session_factory() as db:
+            executor = ToolExecutor(db, patient_id)
+            result, _, _ = await executor.execute(
+                "finish_with_answer",
+                {"answer": answer, "resource_ids": resource_ids},
+            )
+        return result
+
     return [
         get_patient_overview,
         get_resources_by_type,
         search_resources_by_keyword,
         execute_sql,
         get_fhir_resources_schema_info,
+        finish_with_answer,
     ]

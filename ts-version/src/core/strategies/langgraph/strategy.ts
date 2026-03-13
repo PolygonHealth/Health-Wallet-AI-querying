@@ -1,7 +1,7 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { StateGraph } from '@langchain/langgraph';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
-import { MemorySaver } from '@langchain/langgraph/checkpoint/memory';
+import { MemorySaver } from '@langchain/langgraph';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 import { BaseStrategy, QueryContext, QueryResult } from '../../models';

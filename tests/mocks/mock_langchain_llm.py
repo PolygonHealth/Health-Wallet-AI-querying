@@ -7,27 +7,21 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.tools import BaseTool
 
-from src.core.strategies.langgraph.nodes.classify import ClassifyResult
 
 
 class MockLangChainLLM(BaseChatModel):
     """Mock BaseChatModel that returns scripted responses for classify and llm_node."""
 
     model: str = "langgraph-mock"
-    _classify_result: ClassifyResult
     _llm_responses: list[AIMessage]
 
     def __init__(
         self,
         *,
-        classify_result: ClassifyResult | None = None,
         llm_responses: list[AIMessage] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        self._classify_result = classify_result or ClassifyResult(
-            intent="relevant", reason="Health question"
-        )
         self._llm_responses = llm_responses or [
             # Integration tests: full tool loop (get_patient_overview -> get_resources_by_type -> final)
             AIMessage(content="", tool_calls=[{"id": "1", "name": "get_patient_overview", "args": {}}]),
@@ -40,9 +34,8 @@ class MockLangChainLLM(BaseChatModel):
 
     def with_structured_output(self, schema, **kwargs):
         """Return runnable that ainvoke returns ClassifyResult."""
-        result = self._classify_result
         runnable = MagicMock()
-        runnable.ainvoke = AsyncMock(return_value=result)
+        runnable.ainvoke = AsyncMock(return_value=AIMessage(content="", tool_calls=[]))
         return runnable
 
     def bind_tools(self, tools: list[BaseTool] | list[dict], **kwargs):

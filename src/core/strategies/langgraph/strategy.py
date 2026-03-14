@@ -175,4 +175,6 @@ class LanggraphStrategy(BaseStrategy):
                 resource_ids=[],
                 error=str(e),
                 resource_types=[],
+                model_used=getattr(self.llm, "model", None) or "unknown",
+                strategy_used=self.name,
             )

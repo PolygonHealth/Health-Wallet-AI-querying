@@ -1,4 +1,4 @@
-"""Pytest fixtures: testcontainers Postgres, schema, seed data, AsyncClient, mock LLM."""
+"""Pytest fixtures: testcontainers Postgres, schema, seed data, AsyncClient."""
 
 import asyncio
 import json
@@ -11,43 +11,25 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.postgres import PostgresContainer
 
-# Ensure test env before any src imports that read settings
 os.environ.setdefault("GEMINI_API_KEY", "test-key-for-tests")
-os.environ.setdefault(
-    "DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/test"
-)
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/test")
 
 
-# Load src.core first to avoid circular import when registering mocks that import gemini
-def _ensure_core_loaded():
+def _register_mocks():
     import src.core  # noqa: F401
-
-
-# Register mock LLM for tests (model="mock" in API/integration tests)
-def _register_mock_llm():
     from src.llm import client_factory
+    from src.llm.provider import register_llm_override
     from tests.mocks.mock_llm_client import MockLLMClient
+    from tests.mocks.mock_langchain_llm import MockLangChainLLM
 
     client_factory._MODEL_REGISTRY["mock"] = (
         lambda model_id: MockLLMClient(model_id=model_id),
         "mock",
     )
+    register_llm_override("langgraph-mock", lambda: MockLangChainLLM())
 
 
-def _register_langgraph_mock_llm():
-    """Register langgraph-mock: MockLangChainLLM for LangGraph strategy integration tests."""
-    from src.llm.provider import register_llm_override
-    from tests.mocks.mock_langchain_llm import MockLangChainLLM
-
-    def _factory():
-        return MockLangChainLLM()
-
-    register_llm_override("langgraph-mock", _factory)
-
-
-_ensure_core_loaded()
-_register_mock_llm()
-_register_langgraph_mock_llm()
+_register_mocks()
 
 
 @pytest.fixture(scope="session")
@@ -74,18 +56,13 @@ def database_url(postgres_container: PostgresContainer) -> str:
 
 
 @pytest.fixture
-async def db_session(
-    database_url: str,
-) -> AsyncGenerator[AsyncSession, None]:
-    """Create per-test engine, ensure schema, yield session, then dispose engine."""
+async def db_session(database_url: str) -> AsyncGenerator[AsyncSession, None]:
     engine = create_async_engine(database_url, pool_pre_ping=True)
     session_factory = async_sessionmaker(
         engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
-
-    # Ensure schema exists for this engine
     async with engine.begin() as conn:
         await conn.execute(
             text("""
@@ -120,7 +97,6 @@ async def db_session(
 
 @pytest.fixture
 async def seeded_db(db_session: AsyncSession) -> AsyncSession:
-    """Session with seed data (2-3 patients, varied resources)."""
     patients = [
         (
             "patient-1",
@@ -151,52 +127,39 @@ async def seeded_db(db_session: AsyncSession) -> AsyncSession:
 
 @pytest.fixture
 def app(database_url: str):
-    """FastAPI app. Set DATABASE_URL before any src import that reads it."""
     os.environ["DATABASE_URL"] = database_url
     from src.api.app import create_app
+    from src.api.dependencies import get_session_factory
 
-    return create_app()
+    test_app = create_app()
+    engine = create_async_engine(database_url, pool_pre_ping=True)
+    test_session_factory = async_sessionmaker(
+        engine, class_=AsyncSession, expire_on_commit=False
+    )
+    test_app.dependency_overrides[get_session_factory] = lambda: test_session_factory
+    return test_app
+
+
+def _make_client(app, db):
+    from src.api.dependencies import get_db
+
+    async def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    return AsyncClient(transport=transport, base_url="http://test")
 
 
 @pytest.fixture
 async def async_client(app, db_session):
-    """AsyncClient with overridden get_db using per-test session."""
-    from src.api.dependencies import get_db
-
-    async def override_get_db():
-        # Reuse the same AsyncSession for all requests in this test.
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with _make_client(app, db_session) as ac:
         yield ac
     app.dependency_overrides.clear()
 
 
 @pytest.fixture
 async def async_client_seeded(app, seeded_db):
-    """AsyncClient with seeded DB, reusing the seeded session."""
-    from src.api.dependencies import get_db
-
-    async def override_get_db():
-        yield seeded_db
-
-    app.dependency_overrides[get_db] = override_get_db
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with _make_client(app, seeded_db) as ac:
         yield ac
     app.dependency_overrides.clear()
-
-
-@pytest.fixture
-def mock_llm_client():
-    """Configurable mock LLM client for unit tests."""
-    from tests.mocks.mock_llm_client import MockLLMClient
-
-    return MockLLMClient(
-        model_id="mock",
-        response_text='{"answer": "Test response.", "resource_ids": []}',
-        input_tokens=10,
-        output_tokens=5,
-    )

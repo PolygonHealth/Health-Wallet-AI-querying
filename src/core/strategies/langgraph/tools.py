@@ -1,12 +1,3 @@
-"""FHIR tools for LangGraph strategy.
-
-Tools read patient_id and resource_types_collector from _run_context (ContextVar).
-The tool list is built ONCE at startup via create_fhir_tools(session_factory).
-
-Call set_run_context(patient_id, collector) in execute() before graph.ainvoke().
-ContextVar is per-asyncio-Task so concurrent requests are fully isolated.
-"""
-
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Annotated

@@ -12,7 +12,7 @@ ALLOWED_TABLES = {"fhir_resources"}
 # Retry
 MAX_RETRIES = 2  # Retries per LLM call (not per turn — per API call)
 RETRY_BASE_DELAY = 30  # Seconds — doubles on each retry (30, 60)
-RETRYABLE_STATUS_CODES = {429, 500, 503}
+RETRYABLE_STATUS_CODES = {429, 500, 503} 
 
 # Defaults
 DEFAULT_RESOURCE_LIMIT = 20

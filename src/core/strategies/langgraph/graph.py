@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from src.core.strategies.langgraph.state import ConversationState
 from src.core.strategies.langgraph.tools import create_fhir_tools
 from src.core.strategies.utils.constants import MAX_TURNS
+from src.core.strategies.utils.retry import retry_llm_call
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,10 @@ def build_fhir_graph(
 
     async def llm_node(state: ConversationState) -> dict:
         messages = state.get("messages") or []
-        response = await llm_with_tools.ainvoke(messages)
+        response = await retry_llm_call(
+            lambda: llm_with_tools.ainvoke(messages),
+            call_description="llm_node",
+        )
         usage = getattr(response, "usage_metadata", None)
         delta_in, delta_out = _extract_usage(usage, response, llm, messages, tools)
 

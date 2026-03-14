@@ -1,14 +1,3 @@
-"""LanggraphStrategy — slim orchestrator.
-
-Responsibilities:
-  1. Set ContextVar per request (patient_id + resource_types_collector).
-  2. Build initial state and invoke the compiled graph.
-  3. Extract the final answer from messages.
-  4. Return QueryResult.
-
-Graph is compiled once in __init__. All per-request data flows via ContextVar.
-"""
-
 import json
 import logging
 import time
@@ -119,7 +108,6 @@ class LanggraphStrategy(BaseStrategy):
 
         try:
             t0 = time.perf_counter()
-
             initial_state: ConversationState = {
                 "messages": [
                     SystemMessage(
@@ -163,15 +151,22 @@ class LanggraphStrategy(BaseStrategy):
             )
 
         except Exception as e:
+            error_message = str(e)
+            if "429" in error_message or "RESOURCE_EXHAUSTED" in str(e).upper():
+                error_message = "Model Rate limit exceeded. Please try again later."
+
             logger.error(
                 "strategy_failed | strategy=%s | patient_id=%s | error=%s",
                 self.name,
                 context.patient_id,
-                str(e),
+                error_message,
             )
+
             return QueryResult(
                 response_text="",
                 resource_ids=[],
-                error=str(e),
+                error=error_message,
                 resource_types=[],
+                model_used=getattr(self.llm, "model", None) or "unknown",
+                strategy_used=self.name,
             )

@@ -64,7 +64,11 @@ async def test_langgraph_strategy_execute_returns_query_result():
     ):
         # Use mock that returns final answer immediately (no tool calls) to avoid DB
         mock_llm._llm_responses = [
-            AIMessage(content="The patient has hypertension.", tool_calls=[]),
+            AIMessage(
+                content="The patient has hypertension.",
+                tool_calls=[],
+                usage_metadata={"input_tokens": 400, "output_tokens": 10, "total_tokens": 410},
+            ),
         ]
         strategy = LanggraphStrategy(session_factory=mock_db, llm=mock_llm)
         context = QueryContext(

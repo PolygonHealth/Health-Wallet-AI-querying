@@ -126,12 +126,9 @@ class BenchmarkRunner:
                 model_name,
             )
             try:
-                from src.core.strategy_registry import get_strategy_class
-                from src.llm.provider import create_llm
+                from src.api.dependencies import resolve_strategy
 
-                strategy_cls = get_strategy_class(strategy_name)
-                llm = create_llm(model_name)
-                strategy = strategy_cls(session_factory=self.session_factory, llm=llm)
+                strategy = resolve_strategy(strategy_name, self.session_factory, model_name)
 
                 context = QueryContext(
                     patient_id=patient_id,

@@ -1,5 +1,16 @@
 # TypeScript Version Setup Instructions
 
+## Important Notes
+
+the py version of health-wallet-AI-querying has been updated. 
+Please check the py version for the latest changes and updates. and update the ts version accordingly.
+
+- This TypeScript version is a direct port of the Python version
+- some of the files in ts-version have been adjusted with TS and annotated with comments indicating so.  If you see these comments, keep the ts code in such files as is.
+- All configuration is done directly in code (no external files)
+- The design decision was made to avoid external dependencies
+- Future ports should maintain this direct configuration approach
+
 ## Current Status
 
 ✅ **Completed:**

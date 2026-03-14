@@ -1,9 +1,9 @@
 """Shared constants for agentic-style strategies. Never hardcode in strategy/executor/guard."""
 
 # Agent loop
-MAX_TURNS = 15  # Max tool-calling rounds before forcing an answer
+MAX_TURNS = 10  # Max tool-calling rounds before forcing an answer
 MAX_TOTAL_TOOL_CHARS = 200_000  # ~50K tokens — total context budget for all tool results
-MAX_SINGLE_RESULT_CHARS = 50_000  # ~12.5K tokens — cap per individual tool result
+MAX_SINGLE_TOOL_CHARS = 50_000  # ~12.5K tokens — cap per individual tool result
 
 # SQL guard
 SQL_MAX_ROWS = 50  # Hard cap on rows from execute_sql

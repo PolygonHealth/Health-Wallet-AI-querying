@@ -13,17 +13,19 @@ from src.core.strategies.utils.constants import MAX_TURNS
 
 logger = logging.getLogger(__name__)
 
-
 def _route_after_llm(state: ConversationState) -> str:
     """Route to tools if there are pending tool calls and budget remains, else end."""
     if state.get("turn_count", 0) >= MAX_TURNS:
         return "__end__"
     messages = state.get("messages") or []
+
     if not messages:
         return "__end__"
+
     last = messages[-1]
     if isinstance(last, AIMessage) and last.tool_calls:
         return "tools"
+
     return "__end__"
 
 

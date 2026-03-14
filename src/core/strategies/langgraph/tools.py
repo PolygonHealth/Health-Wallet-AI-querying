@@ -40,7 +40,7 @@ def _ctx() -> _RunContext:
     return _run_context.get()
 
 
-def _repo(db: AsyncSession) -> FhirRepository:
+def _fhir_resources_repo(db: AsyncSession) -> FhirRepository:
     return FhirRepository(db, _ctx().patient_id)
 
 
@@ -72,7 +72,7 @@ def create_fhir_tools(session_factory: async_sessionmaker[AsyncSession]) -> list
         Returns counts and date ranges. No clinical content.
         """
         async with session_factory() as db:
-            result, types = await _repo(db).patient_overview()
+            result, types = await _fhir_resources_repo(db).get_patient_overview()
             return result
 
     @tool
@@ -98,7 +98,7 @@ def create_fhir_tools(session_factory: async_sessionmaker[AsyncSession]) -> list
         MedicationRequest, AllergyIntolerance, Procedure, DiagnosticReport, etc.
         """
         async with session_factory() as db:
-            result, _, types = await _repo(db).resources_by_type(resource_type, limit)
+            result, _, types = await _fhir_resources_repo(db).get_resources_by_type(resource_type, limit)
             _collect(types)
             return result
 
@@ -119,7 +119,7 @@ def create_fhir_tools(session_factory: async_sessionmaker[AsyncSession]) -> list
         Prefer get_resources_by_type when the resource type is already known.
         """
         async with session_factory() as db:
-            result, _, types = await _repo(db).resources_by_keyword(keyword, limit)
+            result, _, types = await _fhir_resources_repo(db).get_resources_by_keyword(keyword, limit)
             _collect(types)
             return result
 
@@ -136,7 +136,7 @@ def create_fhir_tools(session_factory: async_sessionmaker[AsyncSession]) -> list
             f"EXAMPLES:\n"
             f"SELECT id AS resource_id, p->'individual'->>'display'\n"
             f"FROM fhir_resources, jsonb_array_elements(resource->'participant') AS p\n"
-            f"WHERE patient_id = :pid LIMIT 10\n\n"
+            f"WHERE id = <uuid>\n\n"
 
             f"SELECT query using :pid for patient_id. "
             f"Example: SELECT id AS resource_id, resource_type FROM fhir_resources "
@@ -154,17 +154,26 @@ def create_fhir_tools(session_factory: async_sessionmaker[AsyncSession]) -> list
         ],
     ) -> str:
         async with session_factory() as db:
-            result, _, types = await _repo(db).resources_by_raw_sql(sql)
+            result, _, types = await _fhir_resources_repo(db).get_resources_by_raw_sql(sql)
             _collect(types)
             return result
 
     @tool
+    async def get_fhir_resources_schema_info() -> str:
+        """
+        Get the schema information for the fhir_resources table.
+        """
+        async with session_factory() as db:
+            return await _fhir_resources_repo(db).get_fhir_resources_schema_info()
+
+    @tool
     async def finish_with_answer(
         answer: Annotated[
-            str,
-            "Your complete, plain-English response to the patient. "
-            "When referencing a specific clinical finding, cite it inline immediately after "
-            "the relevant phrase — format: (Resource ID: <uuid>). "
+            str,       
+            "Your complete response to the patient in markdown (headings, bullets, bold). "
+            "No tables — use bullet or numbered lists. No citation numbers or source sections. "
+            "Include a brief 'Polly's note' summarizing key points in plain language. "
+            "When referencing patient data: use inline citations (Resource ID: <uuid>) for tracking.",
         ],
         resource_ids: Annotated[
             list[str],
@@ -173,12 +182,13 @@ def create_fhir_tools(session_factory: async_sessionmaker[AsyncSession]) -> list
     ) -> str:
         """Always call last. For FHIR questions: cite inline as (Resource ID: <uuid>). Never return text without calling this."""
         async with session_factory() as db:
-            return _repo(db).finish_with_answer(answer, resource_ids or [])
+            return _fhir_resources_repo(db).get_final_answer(answer, resource_ids or [])
 
     return [
         get_patient_overview,
         get_resources_by_type,
         search_resources_by_keyword,
         execute_sql,
+        get_fhir_resources_schema_info,
         finish_with_answer,
     ]

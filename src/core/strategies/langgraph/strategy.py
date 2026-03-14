@@ -119,7 +119,8 @@ class LanggraphStrategy(BaseStrategy):
 
         try:
             t0 = time.perf_counter()
-
+            current_date = datetime.now().strftime("%B %d, %Y")
+            print(f"Current date: {current_date}")
             initial_state: ConversationState = {
                 "messages": [
                     SystemMessage(

@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.strategies.utils.constants import (
     DEFAULT_KEYWORD_LIMIT,
     DEFAULT_RESOURCE_LIMIT,
-    MAX_SINGLE_RESULT_CHARS,
+    MAX_SINGLE_TOOL_CHARS,
 )
 from src.core.strategies.utils.sql_guard import SQLValidationError, validate_sql
 from src.db.queries import (
@@ -29,23 +29,23 @@ _TRUNCATION_MESSAGE = (
     "Result truncated. Use more specific filters to reduce result size."
 )
 
-
 def _truncate(data: dict | list, tool_name: str) -> str:
     """Serialize and truncate if over MAX_SINGLE_RESULT_CHARS."""
     json_str = json.dumps(data, default=str)
-    if len(json_str) <= MAX_SINGLE_RESULT_CHARS:
+    if len(json_str) <= MAX_SINGLE_TOOL_CHARS:
         return json_str
+
     logger.warning(
         "tool_result_truncated | tool=%s | size=%d | cap=%d",
         tool_name,
         len(json_str),
-        MAX_SINGLE_RESULT_CHARS,
+        MAX_SINGLE_TOOL_CHARS,
     )
     return json.dumps(
         {
             "truncated": True,
             "message": _TRUNCATION_MESSAGE,
-            "chars_returned": MAX_SINGLE_RESULT_CHARS,
+            "chars_returned": MAX_SINGLE_TOOL_CHARS,
             "total_chars": len(json_str),
         },
         default=str,
@@ -59,17 +59,17 @@ class FhirRepository:
         self.db = db
         self.patient_id = patient_id
 
-    async def patient_overview(self) -> tuple[str, list[str]]:
+    async def get_patient_overview(self) -> tuple[str, list[str]]:
         """Returns (json_result, resource_types)."""
         try:
             data = await get_patient_overview(self.db, self.patient_id)
             types = [row["resource_type"] for row in data.get("by_type", [])]
-            return _truncate(data, "overview"), types
+            return _truncate(data, "get_patient_overview"), types
         except Exception as e:
-            logger.error("repo_error | method=patient_overview | error=%s", e)
-            return json.dumps({"error": str(e)}), []
+            logger.error("repo_error | method=get_patient_overview | error=%s", e)
+            raise e
 
-    async def resources_by_type(
+    async def get_resources_by_type(
         self,
         resource_type: str,
         limit: int = DEFAULT_RESOURCE_LIMIT,
@@ -82,19 +82,19 @@ class FhirRepository:
             ids = [r["resource_id"] for r in rows]
             types = [resource_type] if resource_type and rows else []
             return (
-                _truncate({"resources": rows, "count": len(rows)}, "resources_by_type"),
+                _truncate({"resources": rows, "count": len(rows)}, "get_resources_by_type"),
                 ids,
                 types,
             )
         except Exception as e:
             logger.error(
-                "repo_error | method=resources_by_type | type=%s | error=%s",
+                "repo_error | method=get_resources_by_type | type=%s | error=%s",
                 resource_type,
                 e,
             )
             return json.dumps({"error": str(e)}), [], []
 
-    async def resources_by_keyword(
+    async def get_resources_by_keyword(
         self,
         keyword: str,
         limit: int = DEFAULT_KEYWORD_LIMIT,
@@ -109,19 +109,19 @@ class FhirRepository:
                 {r["resource_type"] for r in rows if r.get("resource_type")}
             )
             return (
-                _truncate({"resources": rows, "count": len(rows)}, "resources_by_keyword"),
+                _truncate({"resources": rows, "count": len(rows)}, "get_resources_by_keyword"),
                 ids,
                 types,
             )
         except Exception as e:
             logger.error(
-                "repo_error | method=resources_by_keyword | keyword=%s | error=%s",
+                "repo_error | method=get_resources_by_keyword | keyword=%s | error=%s",
                 keyword,
                 e,
             )
             return json.dumps({"error": str(e)}), [], []
 
-    async def resources_by_raw_sql(self, sql: str) -> tuple[str, list[str], list[str]]:
+    async def get_resources_by_raw_sql(self, sql: str) -> tuple[str, list[str], list[str]]:
         """Returns (json_result, resource_ids, resource_types). Validates SQL first."""
         try:
             validated = validate_sql(sql)
@@ -140,24 +140,24 @@ class FhirRepository:
                 {r["resource_type"] for r in rows if r.get("resource_type")}
             )
             return (
-                _truncate({"rows": rows, "count": len(rows)}, "resources_by_raw_sql"),
+                _truncate({"rows": rows, "count": len(rows)}, "get_resources_by_raw_sql"),
                 ids,
                 types,
             )
         except Exception as e:
-            logger.error("repo_error | method=resources_by_raw_sql | error=%s", e)
+            logger.error("repo_error | method=get_resources_by_raw_sql | error=%s", e)
             return json.dumps({"error": str(e)}), [], []
 
-    async def fhir_resources_schema_info(self) -> str:
+    async def get_fhir_resources_schema_info(self) -> str:
         """Returns JSON schema description of fhir_resources table."""
         try:
             data = await get_fhir_resources_schema_info(self.db)
             return json.dumps(data, default=str)
         except Exception as e:
-            logger.error("repo_error | method=fhir_resources_schema_info | error=%s", e)
-            return json.dumps({"error": str(e)})
+            logger.error("repo_error | method=get_fhir_resources_schema_info | error=%s", e)
+            raise e
 
-    def finish_with_answer(self, answer: str, resource_ids: list[str]) -> str:
+    def get_final_answer(self, answer: str, resource_ids: list[str]) -> str:
         """Package the final answer as a JSON string for ToolMessage content."""
         return json.dumps(
             {

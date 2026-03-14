@@ -3,6 +3,21 @@ import { z } from 'zod';
 import { DatabasePool } from '../../../db/session';
 import { DEFAULT_KEYWORD_LIMIT, DEFAULT_RESOURCE_LIMIT, MAX_SQL_ROWS } from '../utils/constants';
 
+// Context for resource type collection
+let _patientId: string = '';
+let _resourceTypesCollector: Set<string> = new Set();
+
+export function setRunContext(patientId: string, resourceTypesCollector: Set<string>) {
+  _patientId = patientId;
+  _resourceTypesCollector = resourceTypesCollector;
+}
+
+function _collect(types: string[]) {
+  if (types && _resourceTypesCollector) {
+    types.forEach(type => _resourceTypesCollector.add(type));
+  }
+}
+
 // Zod schemas for tool inputs
 const ResourcesByTypeSchema = z.object({
   resourceType: z.string().describe('Exact FHIR resource type, e.g. Condition, Observation, MedicationRequest. Not plural.'),
@@ -18,14 +33,17 @@ const ExecuteSqlSchema = z.object({
   sql: z.string().describe(`SELECT query. Must include WHERE patient_id = :pid. Example: SELECT id AS resource_id, resource_type FROM fhir_resources WHERE patient_id = :pid AND resource_type = 'Condition' LIMIT 10`)
 });
 
+const FinishWithAnswerSchema = z.object({
+  answer: z.string().describe('Your complete response to the patient in markdown (headings, bullets, bold). No tables — use bullet or numbered lists. No citation numbers or source sections. Include a brief \'Polly\'s note\' summarizing key points in plain language. When referencing patient data: use inline citations (Resource ID: <uuid>) for tracking.'),
+  resource_ids: z.array(z.string()).optional().describe('Resource IDs you cited inline in your answer.')
+});
+
 export function createFHIRTools(
-  dbPool: DatabasePool,
-  patientId: string,
-  resourceTypesCollector?: Set<string>
+  dbPool: DatabasePool
 ) {
   const _updateCollector = (types: string[]) => {
-    if (resourceTypesCollector && types.length > 0) {
-      types.forEach(type => resourceTypesCollector.add(type));
+    if (types.length > 0) {
+      _collect(types);
     }
   };
 
@@ -44,7 +62,7 @@ export function createFHIRTools(
         ORDER BY resource_type
       `;
       
-      const result = await dbPool.query(query, [patientId]);
+      const result = await dbPool.query(query, [_patientId]);
       _updateCollector(result.rows.map((row: any) => row.resource_type));
       
       return JSON.stringify(result.rows);
@@ -71,7 +89,7 @@ you can then fetch specific types.`,
         LIMIT $3
       `;
       
-      const result = await dbPool.query(query, [patientId, resourceType, limit]);
+      const result = await dbPool.query(query, [_patientId, resourceType, limit]);
       _updateCollector([resourceType]);
       
       return JSON.stringify(result.rows);
@@ -97,7 +115,7 @@ Start with limit 5-10. Increase only if needed.`,
         LIMIT $3
       `;
       
-      const result = await dbPool.query(query, [patientId, `%${keyword}%`, limit]);
+      const result = await dbPool.query(query, [_patientId, `%${keyword}%`, limit]);
       const types = Array.from(new Set(result.rows.map((row: any) => row.resource_type))) as string[];
       _updateCollector(types);
       
@@ -115,7 +133,7 @@ Start with limit 5-10. Increase only if needed.`,
       const { sql } = ExecuteSqlSchema.parse(input);
       // Ensure patient_id parameter is used correctly
       const queryWithParam = sql.replace(':pid', '$1');
-      const result = await dbPool.query(queryWithParam, [patientId]);
+      const result = await dbPool.query(queryWithParam, [_patientId]);
       
       const types = Array.from(new Set(result.rows.map((row: any) => row.resource_type))) as string[];
       _updateCollector(types);
@@ -149,11 +167,24 @@ Call get_fhir_resources_schema_info first if unsure of column names.`,
     }
   );
 
+  const finishWithAnswer = tool(
+    async (input) => {
+      const { answer, resource_ids } = FinishWithAnswerSchema.parse(input);
+      // Return JSON response that matches Python version format
+      return JSON.stringify({ answer, resource_ids: resource_ids || [] });
+    },
+    {
+      name: 'finish_with_answer',
+      description: 'Always call last. For FHIR questions: cite inline as (Resource ID: <uuid>). Never return text without calling this.'
+    }
+  );
+
   return [
     getPatientOverview,
     getResourcesByType,
     searchResourcesByKeyword,
     executeSql,
     getFhirResourcesSchemaInfo,
+    finishWithAnswer,
   ];
 }

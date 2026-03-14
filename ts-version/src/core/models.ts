@@ -22,6 +22,7 @@ export const QueryResultSchema = z.object({
   tokensOut: z.number().default(0),
   latencyMs: z.number(),
   error: z.string().optional(),
+  resourceTypes: z.array(z.string()).optional(),
 });
 
 export type QueryResult = z.infer<typeof QueryResultSchema>;

@@ -1,81 +1,34 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { StateGraph } from '@langchain/langgraph';
-import { ToolNode } from '@langchain/langgraph/prebuilt';
-import { MemorySaver } from '@langchain/langgraph';
-import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 
 import { BaseStrategy, QueryContext, QueryResult } from '../../models';
-import { strategyRegistry } from '../../strategy-registry';
+import { registerStrategy } from '../../strategy-registry';
 import { ConversationState } from './state';
-import { createFHIRTools } from './tools';
-import { createClassifyNode } from './nodes/classify';
-import { createSynthesizeNode } from './nodes/synthesize';
-import { declineNode } from './nodes/decline';
-import { routeAfterClassify, routeAfterLLM } from './edges';
+import { buildFHIRGraph } from './graph';
+import { setRunContext } from './tools';
 import { SYSTEM_PROMPT } from '../utils/prompts';
 import { logger } from '../../../config/logging';
-import { DatabasePool } from '../../../db/session';
 
-@strategyRegistry.register('langgraph')
+@registerStrategy('langgraph')
 export class LanggraphStrategy implements BaseStrategy {
   readonly name = 'langgraph';
 
   constructor(
-    private dbPool: DatabasePool,
+    private dbPool: any,
     private llm: BaseChatModel
-  ) {}
-
-  private buildGraph(context: QueryContext, resourceTypesCollector?: Set<string>): StateGraph<ConversationState> {
-    const tools = createFHIRTools(this.dbPool, context.patientId, resourceTypesCollector);
-    const toolNode = new ToolNode(tools);
-    const llmWithTools = this.llm.bindTools(tools);
-
-    const classifyNode = createClassifyNode(this.llm);
-    const synthesizeNode = createSynthesizeNode(this.llm);
-
-    const llmNode = async (state: ConversationState): Promise<Partial<ConversationState>> => {
-      const response = await llmWithTools.invoke(state.messages || []);
-      return {
-        messages: [response],
-        turnCount: (state.turnCount || 0) + 1,
-      };
-    };
-
-    const builder = new StateGraph<ConversationState>({
-      channels: {
-        messages: {
-          reducer: (current: any[], update: any[]) => [...current, ...update],
-          default: () => [],
-        },
-        resourceIds: { default: () => [] },
-        patientId: { default: () => '' },
-        queryIntent: { default: () => '' },
-        turnCount: { default: () => 0 },
-        budgetExceeded: { default: () => false },
-        finalAnswer: { default: () => null },
-      },
-    });
-
-    builder.addNode('llm', llmNode);
-    builder.addNode('tools', toolNode);
-    builder.addNode('synthesize', synthesizeNode);
-    builder.addNode('decline', declineNode);
-
-    builder.addEdge('__start__', 'llm');
-    builder.addConditionalEdges('llm', routeAfterLLM);
-    builder.addEdge('tools', 'llm');
-    builder.addEdge('synthesize', '__end__');
-    builder.addEdge('decline', '__end__');
-
-    const checkpointer = new MemorySaver();
-    return builder.compile({ checkpointer });
+  ) {
+    this._graph = buildFHIRGraph(this.dbPool, this.llm);
   }
 
+  private _graph: any;
+
   async execute(context: QueryContext): Promise<QueryResult> {
+    const resourceTypesCollector: Set<string> = new Set();
+    setRunContext(context.patientId, resourceTypesCollector);
+
     try {
       const startTime = Date.now();
-      const graph = this.buildGraph(context);
-
+      
       const initialMessages = [
         new SystemMessage(SYSTEM_PROMPT),
         new HumanMessage(context.queryText),
@@ -85,40 +38,41 @@ export class LanggraphStrategy implements BaseStrategy {
         messages: initialMessages,
         patientId: context.patientId,
         turnCount: 0,
-        queryIntent: '',
-        budgetExceeded: false,
-        finalAnswer: null,
+        tokensIn: 0,
+        tokensOut: 0,
       };
 
-      const threadId = `patient-${context.patientId}`;
-      const config = { configurable: { threadId } };
+      const config = { configurable: { thread_id: `patient-${context.patientId}` } };
+      const finalState = await this._graph.ainvoke(initialState, config);
 
-      const finalState = await graph.invoke(initialState, config);
-
-      const finalAnswer = finalState.finalAnswer || 'I could not generate an answer.';
-      const resourceIds = finalState.resourceIds || [];
+      const { answer, resourceIds } = this.extractFinal(finalState.messages || []);
       const latencyMs = Date.now() - startTime;
-
       const modelId = (this.llm as any).model || 'unknown';
 
       logger.info(
-        `langgraph_complete | latency_ms=${latencyMs}`,
-        { latencyMs, modelId, resourceCount: resourceIds.length }
+        `langgraph_complete | patient=${context.patientId} | latency_ms=${latencyMs} | resource_ids=${resourceIds.length} | resource_types=${resourceTypesCollector.size}`,
+        { latencyMs, patientId: context.patientId, resourceCount: resourceIds.length, resourceTypeCount: resourceTypesCollector.size }
       );
 
       return {
-        responseText: finalAnswer,
+        responseText: answer,
         resourceIds,
         modelUsed: modelId,
         strategyUsed: this.name,
-        tokensIn: 0, // TODO: Track token usage
-        tokensOut: 0,
+        tokensIn: finalState.tokensIn || 0,
+        tokensOut: finalState.tokensOut || 0,
         latencyMs,
+        resourceTypes: Array.from(resourceTypesCollector).sort(),
       };
 
     } catch (error) {
+      let errorMessage = String(error);
+      if (errorMessage.includes('429') || errorMessage.toUpperCase().includes('RESOURCE_EXHAUSTED')) {
+        errorMessage = 'Model Rate limit exceeded. Please try again later.';
+      }
+
       logger.error(
-        `strategy_failed | strategy=${this.name} | patient_id=${context.patientId} | error=${error}`,
+        `strategy_failed | strategy=${this.name} | patient_id=${context.patientId} | error=${errorMessage}`,
         { error, strategy: this.name, patientId: context.patientId }
       );
 
@@ -130,8 +84,85 @@ export class LanggraphStrategy implements BaseStrategy {
         tokensIn: 0,
         tokensOut: 0,
         latencyMs: 0,
-        error: error instanceof Error ? error.message : String(error),
+        error: errorMessage,
+        resourceTypes: [],
       };
     }
+  }
+
+  private extractFinal(messages: any[]): { answer: string; resourceIds: string[] } {
+    // Look for finish_with_answer ToolMessage first
+    for (const msg of messages.reverse()) {
+      if ((msg as any).name === 'finish_with_answer' && (msg as any).content) {
+        try {
+          const data = JSON.parse((msg as any).content);
+          if (typeof data === 'object' && data !== null) {
+            const answer = this.extractPlainText(data.answer);
+            const resourceIds = Array.from(new Set(data.resource_ids || [])) as string[];
+            if (answer) {
+              return { answer, resourceIds };
+            }
+          }
+        } catch {
+          // Ignore JSON parse errors
+        }
+      }
+    }
+
+    // Fallback to last AIMessage without tool calls
+    for (const msg of messages.reverse()) {
+      if (msg instanceof AIMessage && !(msg.tool_calls && msg.tool_calls.length > 0)) {
+        const answer = this.extractPlainText(msg.content);
+        if (answer) {
+          return { answer, resourceIds: [] };
+        }
+      }
+    }
+
+    return { answer: 'Sorry, I could not generate an answer.', resourceIds: [] };
+  }
+
+  private extractPlainText(content: any): string {
+    if (content === null) return '';
+    if (typeof content === 'string') {
+      const trimmed = content.trim();
+      if (!trimmed) return '';
+      
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) {
+          const parts: string[] = [];
+          for (const block of parsed) {
+            if (typeof block === 'object' && block !== null && 'text' in block) {
+              parts.push(String(block.text));
+            } else if (typeof block === 'string') {
+              parts.push(block);
+            }
+          }
+          return parts.join('\n').trim() || trimmed;
+        }
+      } catch {
+        // Not JSON, return as-is
+      }
+      return trimmed;
+    }
+    
+    if (Array.isArray(content)) {
+      const parts: string[] = [];
+      for (const block of content) {
+        if (typeof block === 'object' && block !== null && 'text' in block) {
+          parts.push(String(block.text));
+        } else if (typeof block === 'string') {
+          parts.push(block);
+        }
+      }
+      return parts.join('\n').trim();
+    }
+    
+    if (typeof content === 'object' && content !== null && 'text' in content) {
+      return String(content.text).trim();
+    }
+    
+    return String(content).trim() || '';
   }
 }

@@ -88,17 +88,17 @@ export function createApp(): express.Application {
   });
 
   // Routes
-  app.use('/api/v1', queryRouter);
+  app.use('/api/fhir', queryRouter);
   app.use('/api/v1', benchmarkRouter);
-  app.use('/', healthRouter);
+  app.use('/api/fhir', healthRouter);
 
   // Root endpoint
   app.get('/', (req, res) => {
     res.json({
       service: 'Polygon Health AI Query Engine - TypeScript',
       status: 'running',
-      health: '/health',
-      query: '/api/v1/query',
+      health: '/api/fhir/health',
+      query: '/api/fhir/query',
       benchmark: '/api/v1/benchmark',
       docs: '/api-docs',
       version: '0.1.0',

@@ -18,7 +18,7 @@ const router = Router();
  *         patientId:
  *           type: string
  *           description: Patient ID for the query
- *           example: "patient-123"
+ *           example: "2efabc76-892a-b1cf-f47b-4c046d7b197d"
  *         query:
  *           type: string
  *           description: Natural language health query
@@ -76,7 +76,7 @@ const router = Router();
 
 /**
  * @swagger
- * /api/v1/query:
+ * /api/fhir/query:
  *   post:
  *     summary: Process a health query using AI
  *     description: Submits a natural language health query for a specific patient and returns an AI-generated response with relevant FHIR resources

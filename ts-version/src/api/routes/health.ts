@@ -49,7 +49,7 @@ const router = Router();
 
 /**
  * @swagger
- * /health:
+ * /api/fhir/health:
  *   get:
  *     summary: Check service health
  *     description: Returns the health status of the service including database connectivity
@@ -96,7 +96,7 @@ router.get('/health', async (req: Request, res: Response) => {
 
 /**
  * @swagger
- * /health/ready:
+ * /api/fhir/health/ready:
  *   get:
  *     summary: Check if service is ready to handle requests
  *     description: Returns readiness status including database connectivity
@@ -142,7 +142,7 @@ router.get('/health/ready', async (req: Request, res: Response) => {
 
 /**
  * @swagger
- * /health/live:
+ * /api/fhir/health/live:
  *   get:
  *     summary: Check if service is alive
  *     description: Simple liveness check that always returns success if the process is running

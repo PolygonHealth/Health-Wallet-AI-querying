@@ -10,8 +10,8 @@ async function startServer() {
     app.listen(port, () => {
       logger.info(`Server started on port ${port}`);
       logger.info(`API docs available at http://localhost:${port}/api-docs`);
-      logger.info(`Health check at http://localhost:${port}/health`);
-      logger.info(`Query endpoint at http://localhost:${port}/api/v1/query`);
+      logger.info(`Health check at http://localhost:${port}/api/fhir/health`);
+      logger.info(`Query endpoint at http://localhost:${port}/api/fhir/query`);
       logger.info(`Benchmark endpoint at http://localhost:${port}/api/v1/benchmark`);
     });
   } catch (error) {

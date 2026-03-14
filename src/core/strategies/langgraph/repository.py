@@ -65,9 +65,12 @@ class FhirRepository:
             data = await get_patient_overview(self.db, self.patient_id)
             types = [row["resource_type"] for row in data.get("by_type", [])]
             return _truncate(data, "get_patient_overview"), types
+
+        except ValueError as e:
+            raise
         except Exception as e:
             logger.error("repo_error | method=get_patient_overview | error=%s", e)
-            raise e
+            raise ValueError(f"Failed to get patient overview for patient {self.patient_id}: {str(e)}")
 
     async def get_resources_by_type(
         self,

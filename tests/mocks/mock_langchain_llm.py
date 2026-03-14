@@ -24,18 +24,29 @@ class MockLangChainLLM(BaseChatModel):
         super().__init__(**kwargs)
         self._llm_responses = llm_responses or [
             # Integration tests: full tool loop (get_patient_overview -> get_resources_by_type -> final)
-            AIMessage(content="", tool_calls=[{"id": "1", "name": "get_patient_overview", "args": {}}]),
+            AIMessage(
+                content="",
+                tool_calls=[{"id": "1", "name": "get_patient_overview", "args": {}}],
+                usage_metadata={"input_tokens": 500, "output_tokens": 20, "total_tokens": 520},
+            ),
             AIMessage(
                 content="",
                 tool_calls=[{"id": "2", "name": "get_resources_by_type", "args": {"resource_type": "Condition"}}],
+                usage_metadata={"input_tokens": 600, "output_tokens": 25, "total_tokens": 625},
             ),
-            AIMessage(content="Based on the data, the patient has hypertension.", tool_calls=[]),
+            AIMessage(
+                content="Based on the data, the patient has hypertension.",
+                tool_calls=[],
+                usage_metadata={"input_tokens": 700, "output_tokens": 15, "total_tokens": 715},
+            ),
         ]
 
     def with_structured_output(self, schema, **kwargs):
         """Return runnable that ainvoke returns ClassifyResult."""
         runnable = MagicMock()
-        runnable.ainvoke = AsyncMock(return_value=AIMessage(content="", tool_calls=[]))
+        runnable.ainvoke = AsyncMock(
+            return_value=AIMessage(content="", tool_calls=[], usage_metadata={"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})
+        )
         return runnable
 
     def bind_tools(self, tools: list[BaseTool] | list[dict], **kwargs):
@@ -45,7 +56,11 @@ class MockLangChainLLM(BaseChatModel):
         async def ainvoke(messages, **kw):
             if responses:
                 return responses.pop(0)
-            return AIMessage(content="I could not generate an answer.", tool_calls=[])
+            return AIMessage(
+                content="I could not generate an answer.",
+                tool_calls=[],
+                usage_metadata={"input_tokens": 0, "output_tokens": 5, "total_tokens": 5},
+            )
 
         runnable = MagicMock()
         runnable.ainvoke = AsyncMock(side_effect=ainvoke)

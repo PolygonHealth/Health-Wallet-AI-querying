@@ -1,6 +1,8 @@
 import logging
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
+
 
 logger = logging.getLogger(__name__)
 
@@ -38,24 +40,37 @@ async def get_all_fhir_by_patient(db: AsyncSession, patient_id: str) -> list[dic
 async def get_patient_overview(db: AsyncSession, patient_id: str) -> dict:
     """Lightweight overview: resource type counts and date ranges. No clinical content."""
 
-    logger.info("fhir_overview | patient_id=%s", patient_id)
-    result = await db.execute(
-        text(
-            """
-            SELECT
-                resource_type,
-                COUNT(*) AS count,
-                MIN(received_at) AS min_date,
-                MAX(received_at) AS max_date
-            FROM fhir_resources
-            WHERE patient_id = :pid
-            GROUP BY resource_type
-            ORDER BY count DESC
-            """
-        ),
-        {"pid": patient_id},
-    )
-    rows = result.fetchall()
+    logger.info("get_patient_overview | patient_id=%s", patient_id)
+    try:
+        result = await db.execute(
+            text(
+                """
+                SELECT
+                    resource_type,
+                    COUNT(*) AS count,
+                    MIN(received_at) AS min_date,
+                    MAX(received_at) AS max_date
+                FROM fhir_resources
+                WHERE patient_id = :pid
+                GROUP BY resource_type
+                ORDER BY count DESC
+                """
+            ),
+            {"pid": patient_id},
+        )
+        rows = result.fetchall()
+
+    except DBAPIError as e:
+        logger.error("get_patient_overview_failed | patient_id=%s | error=%s", patient_id, str(e))
+        raise ValueError("Invalid patient_id: must be a valid UUID.") from e
+
+    except Exception as e:
+        logger.error("get_patient_overview_failed | patient_id=%s | error=%s", patient_id, str(e))
+        raise e
+    
+    if not rows:
+        raise ValueError(f"No resources found for patient {patient_id}. Patient does not exist!")
+    
     overview = {
         "by_type": [
             {
@@ -68,7 +83,7 @@ async def get_patient_overview(db: AsyncSession, patient_id: str) -> dict:
         ],
         "total_resources": sum(r.count for r in rows),
     }
-    logger.info("fhir_overview_complete | patient_id=%s | types=%d", patient_id, len(rows))
+    logger.info("get_patient_overview_complete | patient_id=%s | types=%d", patient_id, len(rows))
     return overview
 
 
@@ -101,7 +116,7 @@ async def get_fhir_by_type(
             "fhir_query_failed | patient_id=%s | filter=%s | error=%s",
             patient_id, resource_type, str(e),
         )
-        raise
+        raise ValueError(f"Failed to get FHIR resources by type {resource_type} for patient {patient_id}: {str(e)}")
 
     out = [
         {
@@ -148,7 +163,7 @@ async def search_resources_by_keyword(
             "fhir_search_failed | patient_id=%s | keyword=%s | error=%s",
             patient_id, keyword, str(e),
         )
-        raise
+        raise ValueError(f"Failed to search resources by keyword {keyword} for patient {patient_id}: {str(e)}")
 
     out = [
         {
@@ -178,7 +193,7 @@ async def execute_raw_sql(
             rows = result.fetchall()
     except Exception as e:
         logger.warning("sql_execute_failed | error=%s | sql=%s", str(e), sql)
-        raise
+        raise ValueError(f"Failed to execute raw SQL: {str(e)}")
 
     out = []
     for r in rows:
@@ -195,21 +210,30 @@ async def execute_raw_sql(
 async def get_fhir_resources_schema_info(db: AsyncSession) -> dict:
     """Return column names and types for fhir_resources and fhir_note_text."""
 
-    result = await db.execute(
-        text(
-            """
-            SELECT table_name, column_name, data_type
-            FROM information_schema.columns
-            WHERE table_schema = 'public'
-            AND table_name IN ('fhir_resources')
-            ORDER BY table_name, ordinal_position
-            """
-        ),
-    )
-    schema: dict[str, list[dict]] = {}
-    for r in result.fetchall():
-        table = r.table_name
-        if table not in schema:
-            schema[table] = []
-        schema[table].append({"column": r.column_name, "type": r.data_type})
-    return schema
+    try:
+        result = await db.execute(
+            text(
+                """
+                SELECT table_name, column_name, data_type
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                AND table_name IN ('fhir_resources')
+                ORDER BY table_name, ordinal_position
+                """
+            ),
+        )
+        schema: dict[str, list[dict]] = {}
+
+        if not result.fetchall():
+            raise ValueError("No schema found for 'fhir_resources'.")
+        
+        for r in result.fetchall():
+            table = r.table_name
+            if table not in schema:
+                schema[table] = []
+                schema[table].append({"column": r.column_name, "type": r.data_type})
+            return schema
+        
+    except Exception as e:
+        logger.error("get_fhir_resources_schema_info_failed | error=%s", str(e))
+        raise e

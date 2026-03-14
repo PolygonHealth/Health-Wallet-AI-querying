@@ -1,11 +1,10 @@
 from collections.abc import AsyncGenerator
+from typing import Any
 
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.db.session import async_session_factory, get_db as _get_db
 from src.core.strategy_registry import get_strategy_class
-from src.llm.client_factory import create_llm_client
 from src.llm.provider import create_llm
 
 
@@ -18,22 +17,14 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     """Expose async_session_factory for components that manage their own sessions (e.g., BenchmarkRunner)."""
     return async_session_factory
 
+# Cache: (strategy_name, model_id) -> strategy instance
+_strategy_cache: dict[tuple[str, str], Any] = {}
 
-def resolve_strategy(
-    name: str,
-    session_factory: async_sessionmaker[AsyncSession],
-    model_id: str,
-):
-    """
-    Resolve strategy instance. For langgraph: uses create_llm and LanggraphStrategy(session_factory, llm).
-    For others: uses create_llm_client and strategy_cls(db, llm_client).
-    """
-    try:
+def resolve_strategy(name: str, session_factory, model_id: str):
+    key = (name, model_id)
+    if key not in _strategy_cache:
         strategy_cls = get_strategy_class(name)
-        if name == "langgraph":
-            llm = create_llm(model_id)
-            return strategy_cls(session_factory=session_factory, llm=llm)
-        llm_client = create_llm_client(model_id)
-        return strategy_cls(session_factory=session_factory, llm_client=llm_client)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        llm = create_llm(model_id)
+        _strategy_cache[key] = strategy_cls(session_factory=session_factory, llm=llm)
+    return _strategy_cache[key]
+ 

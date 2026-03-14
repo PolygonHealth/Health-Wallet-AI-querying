@@ -1,35 +1,14 @@
 """Unit tests for LangGraph strategy nodes and edges."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from langchain_core.messages import AIMessage
 
 from src.core.models import QueryContext
-from src.core.strategies.langgraph.edges import route_after_classify, route_after_llm
-from src.core.strategies.langgraph.nodes.decline import decline_node
-from src.core.strategies.langgraph.state import (
-    QUERY_INTENT_IRRELEVANT,
-    QUERY_INTENT_NEEDS_CLARIFICATION,
-    QUERY_INTENT_RELEVANT,
-    ConversationState,
-)
-
-
-def test_route_after_classify_relevant():
-    state: ConversationState = {"query_intent": QUERY_INTENT_RELEVANT}
-    assert route_after_classify(state) == "llm"
-
-
-def test_route_after_classify_irrelevant():
-    state: ConversationState = {"query_intent": QUERY_INTENT_IRRELEVANT}
-    assert route_after_classify(state) == "decline"
-
-
-def test_route_after_classify_needs_clarification():
-    state: ConversationState = {"query_intent": QUERY_INTENT_NEEDS_CLARIFICATION}
-    assert route_after_classify(state) == "decline"
+from src.core.strategies.langgraph.edges import route_after_llm
+from src.core.strategies.langgraph.state import ConversationState
 
 
 def test_route_after_llm_with_tool_calls():
@@ -51,7 +30,7 @@ def test_route_after_llm_no_tool_calls():
         ],
         "turn_count": 1,
     }
-    assert route_after_llm(state) == "synthesize"
+    assert route_after_llm(state) == "__end__"
 
 
 def test_route_after_llm_max_turns():
@@ -63,21 +42,7 @@ def test_route_after_llm_max_turns():
         ],
         "turn_count": MAX_TURNS,
     }
-    assert route_after_llm(state) == "synthesize"
-
-
-def test_decline_node_irrelevant():
-    state: ConversationState = {"query_intent": QUERY_INTENT_IRRELEVANT}
-    result = decline_node(state)
-    assert "final_answer" in result
-    assert "health records" in result["final_answer"]
-
-
-def test_decline_node_needs_clarification():
-    state: ConversationState = {"query_intent": QUERY_INTENT_NEEDS_CLARIFICATION}
-    result = decline_node(state)
-    assert "final_answer" in result
-    assert "specific" in result["final_answer"]
+    assert route_after_llm(state) == "__end__"
 
 
 @pytest.mark.asyncio
@@ -94,7 +59,7 @@ async def test_langgraph_strategy_execute_returns_query_result():
     mock_executor.execute = AsyncMock(return_value=('{"resources": [], "count": 0}', []))
 
     with patch(
-        "src.core.strategies.langgraph.strategy.create_fhir_tools",
+        "src.core.strategies.langgraph.tools.create_fhir_tools",
         return_value=[],  # No tools - LLM will return final answer on first call
     ):
         # Use mock that returns final answer immediately (no tool calls) to avoid DB

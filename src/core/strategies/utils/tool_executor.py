@@ -25,7 +25,6 @@ _TRUNCATION_MESSAGE = (
     "Result truncated. Use more specific filters (e.g. resource type, keyword) to reduce result size."
 )
 
-
 class ToolExecutor:
     """Executes agentic tools. Injects patient_id from context. Returns (json_result, resource_ids, resource_types)."""
 
@@ -130,6 +129,7 @@ class ToolExecutor:
 
         if tool_name == "finish_with_answer":
             answer = args.get("answer", "")
-            return {"acknowledged": True, "answer": answer}, [], []
+            ids = args.get("resource_ids") or []
+            return {"acknowledged": True, "answer": answer, "resource_ids": ids, "resource_types": []}, ids, []
 
         return {"error": f"Unknown tool: {tool_name}"}, [], []

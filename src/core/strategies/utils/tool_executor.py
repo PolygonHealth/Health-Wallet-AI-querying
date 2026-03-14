@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.strategies.utils.constants import (
     DEFAULT_KEYWORD_LIMIT,
     DEFAULT_RESOURCE_LIMIT,
-    MAX_SINGLE_RESULT_CHARS,
+    MAX_SINGLE_TOOL_CHARS,
 )
 from src.core.strategies.utils.sql_guard import SQLValidationError, validate_sql
 from src.db.queries import (
@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 _TRUNCATION_MESSAGE = (
     "Result truncated. Use more specific filters (e.g. resource type, keyword) to reduce result size."
 )
-
 
 class ToolExecutor:
     """Executes agentic tools. Injects patient_id from context. Returns (json_result, resource_ids, resource_types)."""
@@ -57,23 +56,23 @@ class ToolExecutor:
     ) -> tuple[str, list[str], list[str]]:
         """
         Execute tool and return (json_result, resource_ids, resource_types).
-        Result is truncated if exceeding MAX_SINGLE_RESULT_CHARS.
+        Result is truncated if exceeding MAX_SINGLE_TOOL_CHARS.
         Errors are returned as {"error": "..."}.
         """
         try:
             result, resource_ids, resource_types = await self._dispatch(tool_name, args)
             json_str = json.dumps(result, default=str)
-            if len(json_str) > MAX_SINGLE_RESULT_CHARS:
+            if len(json_str) > MAX_SINGLE_TOOL_CHARS:
                 logger.warning(
                     "tool_result_truncated | tool=%s | size=%d | cap=%d",
                     tool_name,
                     len(json_str),
-                    MAX_SINGLE_RESULT_CHARS,
+                    MAX_SINGLE_TOOL_CHARS,
                 )
                 truncated = {
                     "truncated": True,
                     "message": _TRUNCATION_MESSAGE,
-                    "chars_returned": MAX_SINGLE_RESULT_CHARS,
+                    "chars_returned": MAX_SINGLE_TOOL_CHARS,
                     "total_chars": len(json_str),
                 }
                 json_str = json.dumps(truncated, default=str)
@@ -130,6 +129,7 @@ class ToolExecutor:
 
         if tool_name == "finish_with_answer":
             answer = args.get("answer", "")
-            return {"acknowledged": True, "answer": answer}, [], []
+            ids = args.get("resource_ids") or []
+            return {"acknowledged": True, "answer": answer, "resource_ids": ids, "resource_types": []}, ids, []
 
         return {"error": f"Unknown tool: {tool_name}"}, [], []

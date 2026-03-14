@@ -1,4 +1,4 @@
-"""Integration tests for POST /api/v1/query."""
+"""Integration tests for POST /api/fhir/query."""
 
 import pytest
 
@@ -6,7 +6,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_valid_request_returns_200_with_response(async_client_seeded):
     resp = await async_client_seeded.post(
-        "/api/v1/query",
+        "/api/fhir/query",
         json={
             "patient_id": "patient-1",
             "query": "What conditions do I have?",
@@ -24,7 +24,7 @@ async def test_valid_request_returns_200_with_response(async_client_seeded):
 @pytest.mark.asyncio
 async def test_missing_patient_id_returns_422(async_client_seeded):
     resp = await async_client_seeded.post(
-        "/api/v1/query",
+        "/api/fhir/query",
         json={"query": "test"},
     )
     assert resp.status_code == 422
@@ -33,7 +33,7 @@ async def test_missing_patient_id_returns_422(async_client_seeded):
 @pytest.mark.asyncio
 async def test_unknown_strategy_returns_400(async_client_seeded):
     resp = await async_client_seeded.post(
-        "/api/v1/query",
+        "/api/fhir/query",
         json={
             "patient_id": "patient-1",
             "query": "test",
@@ -48,7 +48,7 @@ async def test_unknown_strategy_returns_400(async_client_seeded):
 @pytest.mark.asyncio
 async def test_unknown_model_returns_400(async_client_seeded):
     resp = await async_client_seeded.post(
-        "/api/v1/query",
+        "/api/fhir/query",
         json={
             "patient_id": "patient-1",
             "query": "test",

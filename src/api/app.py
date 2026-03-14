@@ -43,9 +43,9 @@ def create_app() -> FastAPI:
             content={"error": "Internal server error"},
         )
 
-    app.include_router(query.router, prefix="/api/v1", tags=["query"])
+    app.include_router(query.router, prefix="/api/fhir", tags=["query"])
     app.include_router(benchmark.router, prefix="/api/v1", tags=["benchmark"])
-    app.include_router(health.router, tags=["health"])
+    app.include_router(health.router, prefix="/api/fhir", tags=["health"])
 
 
     @app.get("/")

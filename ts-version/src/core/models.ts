@@ -55,27 +55,30 @@ export interface BaseStrategy {
   execute(context: QueryContext): Promise<QueryResult>;
 }
 
-// LLM Client interface
-export interface BaseLLMClient {
-  readonly modelId: string;
-  generateWithTools(params: {
-    contents: any[];
-    tools: any[];
-    maxTokens: number;
-    temperature: number;
-    useTools: boolean;
-  }): Promise<LLMResponse>;
-}
-
-export interface LLMResponse {
-  text: string;
-  usage: {
-    inputTokens: number;
-    outputTokens: number;
-  };
-  functionCalls?: any[];
-  rawModelContent?: any;
-}
+/**
+ * TypeScript vs Python LLM Interface Design:
+ * 
+ * TYPESCRIPT APPROACH:
+ * - Uses standard LangChain BaseChatModel interface directly
+ * - No custom LLM client wrapper needed - LangChain handles everything
+ * - Type safety via LangChain's well-defined interfaces
+ * - Built-in support for tools, streaming, callbacks, token counting
+ * - Matches admin project pattern for consistency
+ * 
+ * PYTHON APPROACH:
+ * - Uses custom BaseLLMClient interface for fine-grained control
+ * - Direct Google AI API integration for optimal performance
+ * - Custom wrapper allows specialized token counting and response handling
+ * - Manual tool binding and streaming implementation
+ * - Different architectural philosophy prioritizing explicit control
+ * 
+ * WHY NO CUSTOM LLM INTERFACE IN TYPESCRIPT:
+ * - LangChain provides standardized, well-tested interfaces
+ * - Custom wrappers add complexity without providing benefits
+ * - Type compatibility issues between custom interfaces and LangChain
+ * - Admin project and community best practices use direct LangChain
+ * - Better maintainability and ecosystem integration
+ */
 
 // Database types
 export interface FHIRResource {

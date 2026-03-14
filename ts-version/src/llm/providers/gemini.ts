@@ -1,49 +1,49 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
-import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { BaseLLMClient, LLMResponse } from '../../core/models';
 
-export class GeminiClient implements BaseLLMClient {
-  readonly modelId: string;
-  private model: BaseChatModel;
+/**
+ * TypeScript vs Python LLM Integration Strategy:
+ * 
+ * WHY TYPESCRIPT USES LANGCHAIN DIRECTLY:
+ * - TypeScript ecosystem has excellent LangChain integration with full type safety
+ * - LangChain provides standardized interfaces (BaseChatModel) across all providers
+ * - Built-in support for streaming, callbacks, token counting, and tool binding
+ * - Matches admin project pattern and eliminates custom wrapper overhead
+ * - No need for custom abstraction layers when LangChain handles everything
+ * 
+ * WHY PYTHON USES DIRECT GOOGLE AI API:
+ * - Python's google-generativeai library provides native, optimized integration
+ * - More control over low-level API interactions and streaming
+ * - Python ecosystem favors direct library usage over heavy abstractions
+ * - Custom implementation allows fine-tuned control over token usage and responses
+ * - Different architectural philosophy: Python prefers explicit control
+ */
 
-  constructor(apiKey: string, modelId: string = 'gemini-3.0-flash') {
-    this.modelId = modelId;
-    this.model = new ChatGoogleGenerativeAI({
-      apiKey,
-      model: modelId,
-      temperature: 0.1,
-      maxOutputTokens: 4000,
-    });
-  }
+/**
+ * Export ChatGoogleGenerativeAI for convenient direct usage.
+ * 
+ * Usage: new ChatGoogleGenerativeAI({ apiKey: '...', model: 'gemini-3.0-flash' })
+ */
+export { ChatGoogleGenerativeAI };
 
-  async generateWithTools(params: {
-    contents: any[];
-    tools: any[];
-    maxTokens: number;
-    temperature: number;
-    useTools: boolean;
-  }): Promise<LLMResponse> {
-    try {
-      const response = await this.model.invoke(params.contents[0].content);
-      
-      return {
-        text: response.content as string,
-        usage: {
-          inputTokens: 0, // TODO: Extract actual token usage
-          outputTokens: 0,
-        },
-        functionCalls: (response as any).tool_calls || [],
-        rawModelContent: response,
-      };
-    } catch (error) {
-      throw new Error(`Gemini API error: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-}
+/**
+ * Legacy factory functions for backward compatibility.
+ * 
+ * @deprecated Use `new ChatGoogleGenerativeAI({...})` directly instead.
+ *             These functions are kept for backward compatibility but should not be used in new code.
+ *             The custom wrapper approach has been replaced with direct LangChain integration.
+ */
+// export function createGeminiModel(apiKey: string, modelId: string = 'gemini-3.0-flash'): BaseChatModel {
+//   if (!apiKey) {
+//     throw new Error('Gemini API key is required');
+//   }
+//   return new ChatGoogleGenerativeAI({
+//     apiKey,
+//     model: modelId,
+//     temperature: 0.1,
+//     maxOutputTokens: 4000,
+//   });
+// }
 
-export function createGeminiClient(apiKey: string, modelId?: string): GeminiClient {
-  if (!apiKey) {
-    throw new Error('Gemini API key is required');
-  }
-  return new GeminiClient(apiKey, modelId);
-}
+// export function createGeminiClient(apiKey: string, modelId?: string): BaseChatModel {
+//   return createGeminiModel(apiKey, modelId);
+// }

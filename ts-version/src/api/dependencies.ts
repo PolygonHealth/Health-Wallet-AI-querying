@@ -46,7 +46,7 @@ export function createLLM(provider: string, apiKey: string, options?: {
       //   maxOutputTokens: options?.maxOutputTokens || 8192,
       // });
       const llm = new ChatGoogleGenerativeAI({
-  model: "gemini-2.5-flash",
+  model: "gemini-3.0-flash",
   apiKey:apiKey,
 });
       return llm;

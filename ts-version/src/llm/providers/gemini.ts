@@ -1,4 +1,4 @@
-import { ChatGoogle } from '@langchain/google';
+//import { ChatGoogle } from '@langchain/google';
 
 /**
  * TypeScript vs Python LLM Integration Strategy:
@@ -12,7 +12,7 @@ import { ChatGoogle } from '@langchain/google';
  * 
  * Usage: new ChatGoogle({ model: 'gemini-2.5-flash' })
  */
-export { ChatGoogle };
+//export { ChatGoogle };
 
 /**
  * Legacy factory functions for backward compatibility.

@@ -7,10 +7,11 @@ import { z } from 'zod';
 import { GraphState, StateSchema } from './state';
 import { createFHIRTools } from './tools';
 import { retryLLMCall } from '../utils/retry';
-import { ChatGoogle } from '@langchain/google';
+//import { ChatGoogle } from '@langchain/google';
 import { config } from '../../../config/settings';
 import { MAX_TURNS } from '../utils/constants';
 import { logger } from '../../../config/logging';
+import { GoogleGenAI } from '@google/genai';
 
 function extractUsage(usage: any, response: AIMessage, llm: BaseChatModel, messages: any[], tools: any[]): [number, number] {
   let deltaIn = 0;
@@ -67,10 +68,10 @@ export function buildFHIRGraph(
   }
 
   const tools = createFHIRTools(dbPool);
-  
+
   // Mirror Python: direct tool binding (no fallback logic)
   const toolNode = new ToolNode(tools);
-  
+
   // // DEBUG: Create LLM directly to test bindTools
   // const debugLlm = new ChatGoogle({
   //   model: 'gemini-2.5-flash',
@@ -86,8 +87,8 @@ export function buildFHIRGraph(
   // console.log('Debug LLM constructor:', debugLlm.constructor.name);
   // console.log('Debug bindTools exists:', typeof debugLlm.bindTools);
   // console.log('==================');
-  
-  if( !llm || !llm.bindTools ){
+
+  if (!llm || !llm.bindTools) {
     throw new Error('LLM is required');
   }
   const llmWithTools = llm.bindTools(tools);
@@ -95,12 +96,22 @@ export function buildFHIRGraph(
   const llmNode = async (state: GraphState) => {
     // Mirror Python: simple state access without Zod validation
     const messages = state.messages || [];
-    
+
     const response = await retryLLMCall(
-      async () => llmWithTools.invoke(messages), // Mirror Python: ainvoke
+      async () => {
+        const client = new GoogleGenAI({
+          apiKey: 'AIzaSyDLqfLypdIeBRNrmlzapD_-GxjKtAvA578',
+        });
+
+        const result = await client.models.generateContent({
+          model: "gemini-2.5-flash",
+          contents: "Say hello",
+        });
+        return llmWithTools.invoke(messages)
+      }, // Mirror Python: ainvoke
       'llm_node'
     );
-    
+
     const usage = (response as any).usage_metadata;
     const [deltaIn, deltaOut] = extractUsage(usage, response, llm, messages, tools);
 

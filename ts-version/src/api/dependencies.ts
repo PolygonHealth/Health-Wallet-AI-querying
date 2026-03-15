@@ -1,7 +1,7 @@
 import { BaseStrategy } from '../core/models';
 import { strategyRegistry } from '../core/strategy-registry';
 import { getDbPool } from '../db/session';
-import { ChatGoogle } from '@langchain/google';
+//import { ChatGoogle } from '@langchain/google';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { LanggraphStrategy } from '../core/strategies/langgraph/strategy';
 import { logger } from '../config/logging';
@@ -10,6 +10,7 @@ import { config } from '../config/settings';
 // Import strategy to trigger registration
 //import { buildFHIRGraph } from '../core/strategies/langgraph/graph';
 import '../core/strategies/langgraph'; // Import index to trigger factory registration
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 
 /**
  * TypeScript vs Python Strategy Resolution:
@@ -38,12 +39,16 @@ export function createLLM(provider: string, apiKey: string, options?: {
 }): BaseChatModel {
   switch (provider) {
     case 'gemini':
-      const llm = new ChatGoogle({
-        apiKey,
-        model: options?.model || 'gemini-2.5-flash',
-        temperature: options?.temperature || 0.0,
-        maxOutputTokens: options?.maxOutputTokens || 8192,
-      });
+      // const llm = new ChatGoogle({
+      //   apiKey,
+      //   model: options?.model || 'gemini-2.5-flash',
+      //   temperature: options?.temperature || 0.0,
+      //   maxOutputTokens: options?.maxOutputTokens || 8192,
+      // });
+      const llm = new ChatGoogleGenerativeAI({
+  model: "gemini-2.5-flash",
+  apiKey:apiKey,
+});
       return llm;
     case 'openai':
       // TODO: Implement OpenAI model using LangChain

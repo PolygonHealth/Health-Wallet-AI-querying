@@ -99,14 +99,15 @@ export function buildFHIRGraph(
 
     const response = await retryLLMCall(
       async () => {
-        const client = new GoogleGenAI({
-          apiKey: 'AIzaSyDLqfLypdIeBRNrmlzapD_-GxjKtAvA578',
-        });
+        //test
+        // const client = new GoogleGenAI({
+        //   apiKey: 'AIzaSyDLqfLypdIeBRNrmlzapD_-GxjKtAvA578',
+        // });
 
-        const result = await client.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: "Say hello",
-        });
+        // const result = await client.models.generateContent({
+        //   model: "gemini-2.5-flash",
+        //   contents: "Say hello",
+        // });
         return llmWithTools.invoke(messages)
       }, // Mirror Python: ainvoke
       'llm_node'

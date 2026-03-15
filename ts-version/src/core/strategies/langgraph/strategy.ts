@@ -9,31 +9,8 @@ import { setRunContext } from './tools';
 import { SYSTEM_PROMPT } from '../utils/prompts';
 import { logger } from '../../../config/logging';
 
-/**
- * TypeScript vs Python LangGraph Strategy Architecture:
- * 
- * TYPESCRIPT IMPLEMENTATION:
- * - Uses BaseChatModel from LangChain for standardized LLM interface
- * - Direct LangChain integration eliminates custom wrapper complexity
- * - Built-in tool binding, streaming, and token counting via LangChain
- * - Type-safe graph construction with Zod validation
- * - Matches admin project pattern for consistency and maintainability
- * 
- * PYTHON IMPLEMENTATION:
- * - Uses custom LLM client wrapper for fine-grained API control
- * - Direct Google AI API integration for optimized performance
- * - Manual tool binding and token counting implementation
- * - Context variables for thread-safe state management
- * - Custom retry logic and error handling
- * 
- * KEY DIFFERENCES:
- * 1. TypeScript: LangChain handles low-level details automatically
- * 2. Python: Manual implementation provides maximum control
- * 3. TypeScript: Type safety via Zod and BaseChatModel interfaces
- * 4. Python: Runtime validation and explicit error handling
- */
 
-@registerStrategy('langgraph')
+
 export class LanggraphStrategy implements BaseStrategy {
   readonly name = 'langgraph';
 
@@ -60,8 +37,16 @@ export class LanggraphStrategy implements BaseStrategy {
     try {
       const startTime = Date.now();
       
+      // Format system prompt with current date
+      const currentDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      const formattedPrompt = SYSTEM_PROMPT.replace('{current_date}', currentDate);
+      
       const initialMessages = [
-        new SystemMessage(SYSTEM_PROMPT),
+        new SystemMessage(formattedPrompt),
         new HumanMessage(context.queryText),
       ];
 

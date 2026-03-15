@@ -53,21 +53,19 @@ function extractUsage(usage: any, response: AIMessage, llm: BaseChatModel, messa
 }
 
 function routeAfterLLM(state: GraphState): string {
-  // Validate state with Zod
-  const validatedState = StateSchema.parse(state);
-  
-  if (validatedState.turnCount >= MAX_TURNS) {
+  // Use TypeScript LangGraph constants
+  if (state.turnCount >= MAX_TURNS) {
     return END;
   }
 
-  const messages = validatedState.messages || [];
+  const messages = state.messages || [];
   if (!messages.length) {
     return END;
   }
 
   const last = messages[messages.length - 1];
   if (last instanceof AIMessage && last.tool_calls && last.tool_calls.length > 0) {
-    return 'tools';
+    return "tools";
   }
 
   return END;
@@ -84,42 +82,39 @@ export function buildFHIRGraph(
 
   const tools = createFHIRTools(dbPool);
   
-  // Check if bindTools is available before using it
-  const llmWithTools = (llm as any).bindTools ? (llm as any).bindTools(tools) : llm;
+  // Mirror Python: direct tool creation and binding with proper context
+  const toolNode = new ToolNode(tools);
+  const llmWithTools = llm?.bindTools ? llm.bindTools(tools) : llm;
 
   const llmNode = async (state: GraphState) => {
-    // Validate state with Zod
-    const validatedState = StateSchema.parse(state);
-    const messages = validatedState.messages || [];
+    // Mirror Python: simple state access without Zod validation
+    const messages = state.messages || [];
     
     const response = await retryLLMCall(
-      async () => llmWithTools.invoke(messages),
+      async () => llmWithTools.invoke(messages), // Mirror Python: ainvoke
       'llm_node'
     );
     
     const usage = (response as any).usage_metadata;
-    const [deltaIn, deltaOut] = extractUsage(usage, response as AIMessage, llm, messages, tools);
+    const [deltaIn, deltaOut] = extractUsage(usage, response, llm, messages, tools);
 
     return {
-      messages: [...validatedState.messages, response],
-      turnCount: validatedState.turnCount + 1,
-      tokensIn: validatedState.tokensIn + deltaIn,
-      tokensOut: validatedState.tokensOut + deltaOut,
+      messages: [response],
+      turnCount: (state.turnCount || 0) + 1,
+      tokensIn: (state.tokensIn || 0) + deltaIn,
+      tokensOut: (state.tokensOut || 0) + deltaOut,
     };
   };
 
-  // Use built-in ToolNode like admin project
-  const toolNode = new ToolNode(tools);
-
-  // Build StateGraph using Zod schema directly (exact admin project pattern)
+  // Use correct LangChain.js syntax
   const workflow = new StateGraph(StateSchema)
-    .addNode('llm', llmNode)
-    .addNode('tools', toolNode)
-    .addEdge(START, 'llm')
-    .addEdge('tools', 'llm')
-    .addConditionalEdges('llm', routeAfterLLM);
+    .addNode("llm", llmNode)
+    .addNode("tools", toolNode)
+    .addEdge(START, "llm")
+    .addEdge("tools", "llm")
+    .addConditionalEdges("llm", routeAfterLLM);
 
   const compiled = workflow.compile({ checkpointer });
-  logger.info(`fhir_graph_compiled | tools=${tools.length} | zod_validation=enabled | exact_admin_pattern=true | zod_state_management=true`);
+  logger.info(`fhir_graph_compiled | tools=${tools.length}`);
   return compiled;
 }

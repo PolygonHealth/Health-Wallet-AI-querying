@@ -1,9 +1,9 @@
 // Export the LangGraph strategy to enable module import
-export { LanggraphStrategy } from './strategy';
-export { buildFHIRGraph } from './graph';
-export { createFHIRTools } from './tools';
+// export { LanggraphStrategy } from './strategy';
+// export { buildFHIRGraph } from './graph';
+// export { createFHIRTools } from './tools';
 
-// Import and register the strategy
+// Import and register the strategy (following Python pattern)
 import { strategyRegistry } from '../../strategy-registry';
 import { LanggraphStrategy } from './strategy';
 import { getDbPool } from '../../../db/session';
@@ -11,7 +11,7 @@ import { ChatGoogleGenerativeAI } from '../../../llm/providers/gemini';
 import { config } from '../../../config/settings';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 
-// Register the LangGraph strategy
+// Register the LangGraph strategy as factory function (Python pattern)
 strategyRegistry.register('langgraph', () => {
   const dbPool = getDbPool();
   const llmModel = new ChatGoogleGenerativeAI({

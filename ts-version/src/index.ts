@@ -5,7 +5,7 @@ import { logger } from './config/logging';
 async function startServer() {
   try {
     const app = createApp();
-    const port = config.port;
+    const port = config.PORT;
     
     app.listen(port, () => {
       logger.info(`Server started on port ${port}`);

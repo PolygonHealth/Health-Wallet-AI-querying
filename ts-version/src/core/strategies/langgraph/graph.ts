@@ -82,9 +82,12 @@ export function buildFHIRGraph(
 
   const tools = createFHIRTools(dbPool);
   
-  // Mirror Python: direct tool creation and binding with proper context
+  // Mirror Python: direct tool binding (no fallback logic)
   const toolNode = new ToolNode(tools);
-  const llmWithTools = llm?.bindTools ? llm.bindTools(tools) : llm;
+  if( !llm || !llm.bindTools ){
+    throw new Error('LLM is required');
+  }
+  const llmWithTools = llm.bindTools(tools);
 
   const llmNode = async (state: GraphState) => {
     // Mirror Python: simple state access without Zod validation

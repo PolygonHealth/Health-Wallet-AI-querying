@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { QueryRequestSchema, QueryResponseSchema } from '../../core/models';
 import { resolveStrategy } from '../dependencies';
 import { logger } from '../../config/logging';
+import { getDbPool } from '@/db/session';
+import { config } from '@/config/settings';
 
 const router = Router();
 
@@ -107,70 +109,52 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
+// Dependency injection function (match Python: Depends(get_session_factory))
+function getSessionFactory() {
+  return getDbPool();
+}
+
 router.post('/query', async (req: Request, res: Response) => {
   try {
     // Validate request
     const validatedQuery = QueryRequestSchema.parse(req.body);
     
-    const strategyName = validatedQuery.strategy || 'langgraph';
-    const modelName = validatedQuery.model || 'gemini-3.0-flash';
-    
-    logger.info('Processing query', {
-      patientId: validatedQuery.patientId,
-      strategy: strategyName,
-      model: modelName,
-      queryLength: validatedQuery.query.length,
-    });
+    const strategyName = validatedQuery.strategy || config.defaultStrategy;
+    const modelName = validatedQuery.model || config.defaultModel;
 
-    // Resolve strategy
-    const strategy = resolveStrategy(strategyName);
-    
-    // Execute query
-    const context = {
-      patientId: validatedQuery.patientId,
-      queryText: validatedQuery.query,
-      strategyName,
-      modelName,
-      maxTokens: 4000,
-      temperature: 0.1,
-    };
+    // Get session factory (match Python: session_factory=Depends(get_session_factory))
+    const sessionFactory = getSessionFactory();
 
-    const result = await strategy.execute(context);
-    
-    // Format response
-    const response = QueryResponseSchema.parse({
-      response: result.responseText,
-      resourceIds: result.resourceIds,
-      modelUsed: result.modelUsed,
-      strategyUsed: result.strategyUsed,
-      tokensIn: result.tokensIn,
-      tokensOut: result.tokensOut,
-      latencyMs: result.latencyMs,
-      error: result.error,
-    });
+    try {
+      // Resolve strategy (match Python: resolve_strategy(strategy_name, session_factory, model_name))
+      const strategy = resolveStrategy(strategyName, sessionFactory, modelName);
+      
+      // Execute query (match Python: QueryContext)
+      const context = {
+        patientId: validatedQuery.patientId,
+        queryText: validatedQuery.query,
+        strategyName,
+        modelName,
+      };
 
-    logger.info('Query completed', {
-      patientId: validatedQuery.patientId,
-      strategy: strategyName,
-      latencyMs: result.latencyMs,
-      resourceCount: result.resourceIds.length,
-      hasError: !!result.error,
-    });
-
-    res.json(response);
-  } catch (error) {
-    logger.error('Query failed', { error: error instanceof Error ? error.message : String(error) });
-    
-    if (error instanceof Error && error.message.includes('validation')) {
+      const result = await strategy.execute(context);
+      
+      // Return response (match Python: QueryResponse.from_result(result))
+      return res.json(result);
+    } catch (error) {
+      // Match Python: HTTPException(status_code=400, detail=str(e))
+      const errorMessage = error instanceof Error ? error.message : String(error);
       return res.status(400).json({
-        error: 'Invalid request',
-        message: error.message,
+        error: 'Query processing failed',
+        message: errorMessage,
       });
     }
-
-    res.status(500).json({
-      error: 'Query processing failed',
-      message: error instanceof Error ? error.message : 'Unknown error',
+  } catch (error) {
+    // Request validation error
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    return res.status(400).json({
+      error: 'Invalid request',
+      message: errorMessage,
     });
   }
 });

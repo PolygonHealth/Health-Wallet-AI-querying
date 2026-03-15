@@ -7,7 +7,7 @@ export const QueryContextSchema = z.object({
   queryText: z.string().min(1),
   strategyName: z.string().default('langgraph'),
   modelName: z.string().default('gemini-3.0-flash'),
-  maxTokens: z.number().default(4000),
+  maxTokens: z.number().default(4096),
   temperature: z.number().default(0.1),
 });
 

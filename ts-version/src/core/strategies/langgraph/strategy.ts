@@ -2,15 +2,14 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 
 import { BaseStrategy, QueryContext, QueryResult } from '../../models';
-import { registerStrategy } from '../../strategy-registry';
 import { ConversationState } from './state';
 import { buildFHIRGraph } from './graph';
 import { setRunContext } from './tools';
 import { SYSTEM_PROMPT } from '../utils/prompts';
 import { logger } from '../../../config/logging';
+import { registerStrategy } from '../../strategy-registry';
 
-
-
+@registerStrategy('langgraph')
 export class LanggraphStrategy implements BaseStrategy {
   readonly name = 'langgraph';
 

@@ -1,7 +1,7 @@
 import { BaseStrategy } from '../core/models';
 import { strategyRegistry } from '../core/strategy-registry';
 import { getDbPool } from '../db/session';
-import { ChatGoogleGenerativeAI } from '../llm/providers/gemini';
+import { ChatGoogle } from '@langchain/google';
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { LanggraphStrategy } from '../core/strategies/langgraph/strategy';
 import { logger } from '../config/logging';
@@ -38,13 +38,13 @@ export function createLLM(provider: string, apiKey: string, options?: {
 }): BaseChatModel {
   switch (provider) {
     case 'gemini':
-      const llm =  new ChatGoogleGenerativeAI({
+      const llm = new ChatGoogle({
         apiKey,
-        model: options?.model || 'gemini-3.0-flash',
+        model: options?.model || 'gemini-2.5-flash',
         temperature: options?.temperature || 0.0,
         maxOutputTokens: options?.maxOutputTokens || 8192,
-      }) ;
-      return llm as unknown as BaseChatModel
+      });
+      return llm;
     case 'openai':
       // TODO: Implement OpenAI model using LangChain
       throw new Error('OpenAI model not implemented yet');

@@ -15,7 +15,7 @@ const envConfig = {
   databaseUrl: "postgresql+asyncpg://polygonuser:yourpassword@your-rds-endpoint.us-east-1.rds.amazonaws.com:5432/polygon_health?ssl=require",
   geminiApiKey: "AIzaSyDLqfLypdIeBRNrmlzapD_-GxjKtAvA578",
   defaultStrategy: "langgraph",
-  defaultModel: "gemini-3.0-flash",
+  defaultModel: "gemini-2.5-flash",
   logLevel: "info",
   port: "10000"
 };
@@ -33,7 +33,7 @@ const settingsSchema = z.object({
   
   // Default Settings
   defaultStrategy: z.string().default('langgraph'),
-  defaultModel: z.string().default('gemini-3.0-flash'),
+  defaultModel: z.string().default('gemini-2.5-flash'),
   logLevel: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   port: z.string().transform(Number).default('10000'),
   

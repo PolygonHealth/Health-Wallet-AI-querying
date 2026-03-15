@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { GraphState, StateSchema } from './state';
 import { createFHIRTools } from './tools';
 import { retryLLMCall } from '../utils/retry';
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { ChatGoogle } from '@langchain/google';
 import { config } from '../../../config/settings';
 import { MAX_TURNS } from '../utils/constants';
 import { logger } from '../../../config/logging';
@@ -72,9 +72,8 @@ export function buildFHIRGraph(
   const toolNode = new ToolNode(tools);
   
   // // DEBUG: Create LLM directly to test bindTools
-  // const debugLlm = new ChatGoogleGenerativeAI({
-  //   apiKey: config.geminiApiKey,
-  //   model: 'gemini-3.0-flash',
+  // const debugLlm = new ChatGoogle({
+  //   model: 'gemini-2.5-flash',
   //   temperature: 0.0,
   //   maxOutputTokens: 8192,
   // });

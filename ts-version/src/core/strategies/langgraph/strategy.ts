@@ -58,7 +58,7 @@ export class LanggraphStrategy implements BaseStrategy {
       };
 
       const config = { configurable: { thread_id: `patient-${context.patientId}` } };
-      const finalState = await this._graph.ainvoke(initialState, config);
+      const finalState = await this._graph.invoke(initialState, config);
 
       const { answer, resourceIds } = this.extractFinal(finalState.messages || []);
       const latencyMs = Date.now() - startTime;

@@ -71,22 +71,22 @@ export function buildFHIRGraph(
   // Mirror Python: direct tool binding (no fallback logic)
   const toolNode = new ToolNode(tools);
   
-  // DEBUG: Create LLM directly to test bindTools
-  const debugLlm = new ChatGoogleGenerativeAI({
-    apiKey: config.geminiApiKey,
-    model: 'gemini-3.0-flash',
-    temperature: 0.0,
-    maxOutputTokens: 8192,
-  });
+  // // DEBUG: Create LLM directly to test bindTools
+  // const debugLlm = new ChatGoogleGenerativeAI({
+  //   apiKey: config.geminiApiKey,
+  //   model: 'gemini-3.0-flash',
+  //   temperature: 0.0,
+  //   maxOutputTokens: 8192,
+  // });
 
-  console.log('=== DEBUG INFO ===');
-  console.log('Original LLM type:', typeof llm);
-  console.log('Original LLM constructor:', llm?.constructor?.name);
-  console.log('Original bindTools exists:', typeof llm?.bindTools);
-  console.log('Debug LLM type:', typeof debugLlm);
-  console.log('Debug LLM constructor:', debugLlm.constructor.name);
-  console.log('Debug bindTools exists:', typeof debugLlm.bindTools);
-  console.log('==================');
+  // console.log('=== DEBUG INFO ===');
+  // console.log('Original LLM type:', typeof llm);
+  // console.log('Original LLM constructor:', llm?.constructor?.name);
+  // console.log('Original bindTools exists:', typeof llm?.bindTools);
+  // console.log('Debug LLM type:', typeof debugLlm);
+  // console.log('Debug LLM constructor:', debugLlm.constructor.name);
+  // console.log('Debug bindTools exists:', typeof debugLlm.bindTools);
+  // console.log('==================');
   
   if( !llm || !llm.bindTools ){
     throw new Error('LLM is required');

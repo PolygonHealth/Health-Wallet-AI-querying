@@ -13,7 +13,7 @@ import { z } from 'zod';
 // Direct configuration object
 const envConfig = {
   databaseUrl: "postgresql+asyncpg://polygonuser:yourpassword@your-rds-endpoint.us-east-1.rds.amazonaws.com:5432/polygon_health?ssl=require",
-  geminiApiKey: "your-gemini-api-key",
+  geminiApiKey: "AIzaSyDLqfLypdIeBRNrmlzapD_-GxjKtAvA578",
   defaultStrategy: "langgraph",
   defaultModel: "gemini-3.0-flash",
   logLevel: "info",

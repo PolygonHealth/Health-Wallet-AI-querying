@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { QueryRequestSchema, QueryResponseSchema } from '../../core/models';
+import { QueryRequestSchema, QueryResponseSchema, QueryContextSchema } from '../../core/models';
 import { resolveStrategy } from '../dependencies';
 import { logger } from '../../config/logging';
 import { getDbPool } from '@/db/session';
@@ -130,12 +130,12 @@ router.post('/query', async (req: Request, res: Response) => {
       const strategy = resolveStrategy(strategyName, sessionFactory, modelName);
       
       // Execute query (match Python: QueryContext)
-      const context = {
+      const context = QueryContextSchema.parse({
         patientId: validatedQuery.patientId,
         queryText: validatedQuery.query,
         strategyName,
         modelName,
-      };
+      });
 
       const result = await strategy.execute(context);
       

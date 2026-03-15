@@ -1,29 +1,16 @@
 import { BaseChatModel } from '@langchain/core/language_models/chat_models';
-import { AIMessage, BaseMessage } from '@langchain/core/messages';
-import { StateGraph, START, END } from '@langchain/langgraph';
-import { MemorySaver } from '@langchain/langgraph';
+import { HumanMessage, SystemMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
+import { MemorySaver, StateGraph, START, END } from '@langchain/langgraph';
 import { z } from 'zod';
 
+import { GraphState, StateSchema } from './state';
 import { createFHIRTools } from './tools';
 import { retryLLMCall } from '../utils/retry';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
+import { config } from '../../../config/settings';
 import { MAX_TURNS } from '../utils/constants';
 import { logger } from '../../../config/logging';
-
-// Zod schema using admin project mixed pattern - plain Zod for simple fields
-const StateSchema = z.object({
-  // Main messages field - NO register (let LangGraph handle default merging)
-  messages: z.array(z.custom<BaseMessage>()),
-  
-  // Simple primitive fields - NO register (let LangGraph handle default behavior)
-  patientId: z.string().default(''),
-  turnCount: z.number().default(0),
-  tokensIn: z.number().default(0),
-  tokensOut: z.number().default(0),
-});
-
-// Infer the TypeScript type from the Zod schema
-type GraphState = z.infer<typeof StateSchema>;
 
 function extractUsage(usage: any, response: AIMessage, llm: BaseChatModel, messages: any[], tools: any[]): [number, number] {
   let deltaIn = 0;
@@ -38,7 +25,6 @@ function extractUsage(usage: any, response: AIMessage, llm: BaseChatModel, messa
 
   if (deltaIn === 0 && deltaOut === 0) {
     try {
-      // Fallback to tokenizer if available
       if ((llm as any).get_num_tokens_from_messages) {
         deltaIn = (llm as any).get_num_tokens_from_messages(messages, { tools });
       }
@@ -84,6 +70,24 @@ export function buildFHIRGraph(
   
   // Mirror Python: direct tool binding (no fallback logic)
   const toolNode = new ToolNode(tools);
+  
+  // DEBUG: Create LLM directly to test bindTools
+  const debugLlm = new ChatGoogleGenerativeAI({
+    apiKey: config.geminiApiKey,
+    model: 'gemini-3.0-flash',
+    temperature: 0.0,
+    maxOutputTokens: 8192,
+  });
+
+  console.log('=== DEBUG INFO ===');
+  console.log('Original LLM type:', typeof llm);
+  console.log('Original LLM constructor:', llm?.constructor?.name);
+  console.log('Original bindTools exists:', typeof llm?.bindTools);
+  console.log('Debug LLM type:', typeof debugLlm);
+  console.log('Debug LLM constructor:', debugLlm.constructor.name);
+  console.log('Debug bindTools exists:', typeof debugLlm.bindTools);
+  console.log('==================');
+  
   if( !llm || !llm.bindTools ){
     throw new Error('LLM is required');
   }

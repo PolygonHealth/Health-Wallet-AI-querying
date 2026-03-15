@@ -11,7 +11,7 @@ import { healthRouter } from './routes/health';
 import { benchmarkRouter } from './routes/benchmark';
 
 export function createApp(): express.Application {
-  setupLogging(config.logLevel);
+  setupLogging(config.LOG_LEVEL);
   
   const app = express();
 
@@ -30,7 +30,7 @@ export function createApp(): express.Application {
       },
       servers: [
         {
-          url: `http://localhost:${config.port}`,
+          url: `http://localhost:${config.PORT}`,
           description: 'Development server',
         },
       ],
@@ -119,7 +119,7 @@ export function createApp(): express.Application {
 
     res.status(500).json({
       error: 'Internal server error',
-      message: config.logLevel === 'debug' ? err.message : undefined,
+      message: config.LOG_LEVEL === 'debug' ? err.message : undefined,
     });
   });
 

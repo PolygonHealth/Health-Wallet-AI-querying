@@ -46,8 +46,8 @@ export function createLLM(provider: string, apiKey: string, options?: {
       //   maxOutputTokens: options?.maxOutputTokens || 8192,
       // });
       const llm = new ChatGoogleGenerativeAI({
-  model: "gemini-3.0-flash",
-  apiKey:apiKey,
+  model: options?.model || config.DEFAULT_MODEL,
+  apiKey: config.GEMINI_API_KEY,
 });
       return llm;
     case 'openai':
@@ -112,7 +112,7 @@ export function resolveStrategy(strategyName: string, sessionFactory: any, model
   }
   
   // Create LLM (match Python: create_llm)
-  const llm = createLLM('gemini', config.geminiApiKey, { model: modelId });
+  const llm = createLLM('gemini', config.GEMINI_API_KEY, { model: modelId });
   
   // Create strategy instance (match Python: strategy_cls(session_factory=session_factory, llm=llm))
   const strategy = new StrategyClass(sessionFactory, llm);

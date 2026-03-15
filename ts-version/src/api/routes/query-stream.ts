@@ -126,8 +126,8 @@ router.post('/query-stream', async (req: Request, res: Response) => {
     // Validate request
     const validatedQuery = QueryRequestSchema.parse(req.body);
     
-    const strategyName = validatedQuery.strategy || config.defaultStrategy;
-    const modelName = validatedQuery.model || config.defaultModel;
+    const strategyName = validatedQuery.strategy || config.DEFAULT_STRATEGY;
+    const modelName = validatedQuery.model || config.DEFAULT_MODEL;
 
     // Get session factory
     const sessionFactory = getSessionFactory();

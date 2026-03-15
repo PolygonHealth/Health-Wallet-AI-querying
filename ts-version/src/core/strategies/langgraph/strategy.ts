@@ -2,7 +2,7 @@ import { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 
 import { BaseStrategy, QueryContext, QueryResult } from '../../models';
-import { ConversationState } from './state';
+import { ConversationState, StreamEvent } from './state';
 import { buildFHIRGraph } from './graph';
 import { setRunContext } from './tools';
 import { SYSTEM_PROMPT } from '../utils/prompts';
@@ -28,6 +28,151 @@ export class LanggraphStrategy implements BaseStrategy {
   }
 
   private _graph: any;
+
+  async executeWithStreaming(context: QueryContext, onEvent: (event: StreamEvent) => void): Promise<QueryResult> {
+    const resourceTypesCollector: Set<string> = new Set();
+    setRunContext(context.patientId, resourceTypesCollector);
+
+    try {
+      const startTime = Date.now();
+      
+      // Emit thinking event
+      onEvent({
+        type: 'thinking',
+        data: { message: 'Analyzing your health question...' },
+        timestamp: new Date().toISOString()
+      });
+      
+      // Format system prompt with current date
+      const currentDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+      const formattedPrompt = SYSTEM_PROMPT.replace('{current_date}', currentDate);
+      
+      const initialMessages = [
+        new SystemMessage(formattedPrompt),
+        new HumanMessage(context.queryText),
+      ];
+
+      const initialState: ConversationState = {
+        messages: initialMessages,
+        patientId: context.patientId,
+        turnCount: 0,
+        tokensIn: 0,
+        tokensOut: 0,
+        onEvent, // Pass callback through state
+      };
+
+      const config = { configurable: { thread_id: `patient-${context.patientId}` } };
+      
+      // Use graph streaming for real-time events
+      let finalState;
+      for await (const chunk of this._graph.stream(initialState, config)) {
+        finalState = chunk.state;
+        
+        // Emit graph-level events
+        if (chunk.node === 'llm') {
+          onEvent({
+            type: 'graph_step',
+            data: {
+              node: 'llm',
+              message: 'AI is analyzing and deciding next actions...',
+              turnCount: chunk.state.turnCount,
+              tokensSoFar: (chunk.state.tokensIn || 0) + (chunk.state.tokensOut || 0)
+            },
+            timestamp: new Date().toISOString()
+          });
+        } else if (chunk.node === 'tools') {
+          const lastMessage = chunk.state.messages[chunk.state.messages.length - 1];
+          const toolCalls = (lastMessage as any)?.tool_calls || [];
+          
+          onEvent({
+            type: 'graph_step',
+            data: {
+              node: 'tools',
+              message: 'Executing health data retrieval...',
+              toolCount: toolCalls.length
+            },
+            timestamp: new Date().toISOString()
+          });
+        }
+        
+        // ToolNode wrapper will emit tool-level events when onEvent is present
+        // No additional events needed here since ToolNode handles it
+      }
+
+      const { answer, resourceIds } = this.extractFinal(finalState.messages || []);
+      const latencyMs = Date.now() - startTime;
+      const modelId = (this.llm as any).model || 'unknown';
+
+      // Emit completion event
+      onEvent({
+        type: 'complete',
+        data: {
+          finalResponse: answer,
+          resourceIds,
+          tokensIn: finalState.tokensIn || 0,
+          tokensOut: finalState.tokensOut || 0,
+          latencyMs,
+          modelUsed: modelId,
+          strategyUsed: this.name,
+          resourceTypes: Array.from(resourceTypesCollector).sort()
+        },
+        timestamp: new Date().toISOString()
+      });
+
+      logger.info(
+        `langgraph_complete | patient=${context.patientId} | latency_ms=${latencyMs} | resource_ids=${resourceIds.length} | resource_types=${resourceTypesCollector.size}`,
+        { latencyMs, patientId: context.patientId, resourceCount: resourceIds.length, resourceTypeCount: resourceTypesCollector.size }
+      );
+
+      return {
+        responseText: answer,
+        resourceIds,
+        modelUsed: modelId,
+        strategyUsed: this.name,
+        tokensIn: finalState.tokensIn || 0,
+        tokensOut: finalState.tokensOut || 0,
+        latencyMs,
+        resourceTypes: Array.from(resourceTypesCollector).sort(),
+      };
+
+    } catch (error) {
+      let errorMessage = String(error);
+      if (errorMessage.includes('429') || errorMessage.toUpperCase().includes('RESOURCE_EXHAUSTED')) {
+        errorMessage = 'Model Rate limit exceeded. Please try again later.';
+      }
+
+      // Emit error event
+      onEvent({
+        type: 'error',
+        data: {
+          error: 'Processing failed',
+          message: errorMessage
+        },
+        timestamp: new Date().toISOString()
+      });
+
+      logger.error(
+        `strategy_failed | strategy=${this.name} | patient_id=${context.patientId} | error=${errorMessage}`,
+        { error, strategy: this.name, patientId: context.patientId }
+      );
+
+      return {
+        responseText: '',
+        resourceIds: [],
+        modelUsed: (this.llm as any).model || 'unknown',
+        strategyUsed: this.name,
+        tokensIn: 0,
+        tokensOut: 0,
+        latencyMs: 0,
+        error: errorMessage,
+        resourceTypes: [],
+      };
+    }
+  }
 
   async execute(context: QueryContext): Promise<QueryResult> {
     const resourceTypesCollector: Set<string> = new Set();

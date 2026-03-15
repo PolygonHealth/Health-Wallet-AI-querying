@@ -8,6 +8,9 @@ export const StateSchema = z.object({
   turnCount: z.number().default(0),
   tokensIn: z.number().default(0),
   tokensOut: z.number().default(0),
+  
+  // Event propagation for streaming
+  onEvent: z.function().optional(),
 });
 
 // TypeScript type inferred from Zod schema
@@ -20,6 +23,14 @@ export interface ConversationState {
   turnCount?: number;
   tokensIn?: number;
   tokensOut?: number;
+  onEvent?: (event: StreamEvent) => void;
+}
+
+// Stream event interface
+export interface StreamEvent {
+  type: 'thinking' | 'tool_call' | 'tool_result' | 'graph_step' | 'complete' | 'error';
+  data: any;
+  timestamp: string;
 }
 
 // LangGraph state reducer for messages

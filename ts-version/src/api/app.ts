@@ -6,6 +6,7 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import { config } from '../config/settings';
 import { logger, setupLogging } from '../config/logging';
 import { queryRouter } from './routes/query';
+import { queryStreamRouter } from './routes/query-stream';
 import { healthRouter } from './routes/health';
 import { benchmarkRouter } from './routes/benchmark';
 
@@ -89,6 +90,7 @@ export function createApp(): express.Application {
 
   // Routes
   app.use('/api/fhir', queryRouter);
+  app.use('/api/fhir', queryStreamRouter);
   app.use('/api/v1', benchmarkRouter);
   app.use('/api/fhir', healthRouter);
 
@@ -99,6 +101,7 @@ export function createApp(): express.Application {
       status: 'running',
       health: '/api/fhir/health',
       query: '/api/fhir/query',
+      queryStream: '/api/fhir/query-stream',
       benchmark: '/api/v1/benchmark',
       docs: '/api-docs',
       version: '0.1.0',

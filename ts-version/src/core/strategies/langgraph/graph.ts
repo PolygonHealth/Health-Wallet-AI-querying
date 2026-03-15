@@ -4,13 +4,27 @@ import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { MemorySaver, StateGraph, START, END } from '@langchain/langgraph';
 import { z } from 'zod';
 
-import { GraphState, StateSchema } from './state';
+import { GraphState, StateSchema, StreamEvent } from './state';
 import { createFHIRTools } from './tools';
 import { retryLLMCall } from '../utils/retry';
-//import { ChatGoogle } from '@langchain/google';
+import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { config } from '../../../config/settings';
 import { MAX_TURNS } from '../utils/constants';
 import { logger } from '../../../config/logging';
+
+// Custom tool messages mapping
+const getToolMessage = (toolName: string): string => {
+  const messageMap: Record<string, string> = {
+    'get_patient_overview': 'Retrieving patient overview...',
+    'get_resources_by_type': 'Fetching specific health data...',
+    'search_resources_by_keyword': 'Searching health records...',
+    'execute_sql': 'Analyzing health data...',
+    'get_fhir_resources_schema_info': 'Loading health record schema...',
+    'finish_with_answer': 'Finalizing your health analysis...'
+  };
+  return messageMap[toolName] || 'Processing health data...';
+};
+
 import { GoogleGenAI } from '@google/genai';
 
 function extractUsage(usage: any, response: AIMessage, llm: BaseChatModel, messages: any[], tools: any[]): [number, number] {
@@ -69,8 +83,74 @@ export function buildFHIRGraph(
 
   const tools = createFHIRTools(dbPool);
 
-  // Mirror Python: direct tool binding (no fallback logic)
-  const toolNode = new ToolNode(tools);
+  // Create streaming tool node wrapper
+  const streamingToolNode = async (state: GraphState) => {
+    const { onEvent } = state;
+    const lastMessage = state.messages[state.messages.length - 1];
+    const toolCalls = (lastMessage as any)?.tool_calls || [];
+    
+    // Emit events for each tool call
+    for (const toolCall of toolCalls) {
+      if (onEvent) {
+        let message: string;
+        
+        // Use switch for different tool messages
+        switch (toolCall.function.name) {
+          case 'get_patient_overview':
+            message = 'Retrieving patient overview...';
+            break;
+          case 'get_resources_by_type':
+            message = 'Fetching specific health data...';
+            break;
+          case 'search_resources_by_keyword':
+            message = 'Searching health records...';
+            break;
+          case 'execute_sql':
+            message = 'Analyzing health data...';
+            break;
+          case 'get_fhir_resources_schema_info':
+            message = 'Loading health record schema...';
+            break;
+          case 'finish_with_answer':
+            message = 'Finalizing your health analysis...';
+            break;
+          default:
+            message = 'Processing health data...';
+            break;
+        }
+        
+        onEvent({
+          type: 'tool_call',
+          data: {
+            toolName: toolCall.function.name,
+            message
+          },
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+
+    // Execute original tool node
+    const result = await new ToolNode(tools).invoke(state);
+    
+    // Emit completion events
+    if (onEvent && toolCalls.length > 0) {
+      onEvent({
+        type: 'tool_result',
+        data: {
+          message: 'Health data retrieval complete',
+          toolCount: toolCalls.length
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Preserve onEvent callback in state
+    return {
+      ...result,
+      onEvent
+    };
+  };
 
   // // DEBUG: Create LLM directly to test bindTools
   // const debugLlm = new ChatGoogle({
@@ -121,13 +201,14 @@ export function buildFHIRGraph(
       turnCount: (state.turnCount || 0) + 1,
       tokensIn: (state.tokensIn || 0) + deltaIn,
       tokensOut: (state.tokensOut || 0) + deltaOut,
+      onEvent: state.onEvent, // Preserve callback
     };
   };
 
   // Use correct LangChain.js syntax
   const workflow = new StateGraph(StateSchema)
     .addNode("llm", llmNode)
-    .addNode("tools", toolNode)
+    .addNode("tools", streamingToolNode)
     .addEdge(START, "llm")
     .addEdge("tools", "llm")
     .addConditionalEdges("llm", routeAfterLLM);

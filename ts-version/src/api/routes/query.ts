@@ -33,7 +33,7 @@ const router = Router();
  *         model:
  *           type: string
  *           description: AI model to use
- *           default: "gemini-2.5-flash"
+ *           default: "gemini-3-flash-preview"
  *     
  *     QueryResponse:
  *       type: object

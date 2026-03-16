@@ -27,7 +27,7 @@ function _fhirResourcesRepo(db: DatabasePool): FhirRepository {
 const ResourcesByTypeSchema = z.object({
   resourceType: z.string().describe('Exact FHIR resource type, e.g. Condition, Observation, MedicationRequest. Not plural.'),
   limit: z.number().optional().default(DEFAULT_RESOURCE_LIMIT).describe('Max resources to return. Start with 5-10. Increase only if needed.')
-});
+}).passthrough();
 
 const SearchResourcesSchema = z.object({
   keyword: z.string().describe('Search term, e.g. diabetes, hypertension, medication name.'),
@@ -87,6 +87,7 @@ fhir_resources table columns:
 - has_document_text (BOOLEAN)
         
 Returns counts and date ranges. No clinical content.`,
+      //schema: z.object({}) // ✅ No input parameters
     }
   );
 
@@ -119,7 +120,8 @@ Prefer this over execute_sql for all standard resource type queries.
 
 resource_type must be exact and singular: Condition, Observation,
 MedicationRequest, AllergyIntolerance, Procedure, DiagnosticReport, etc.`,
-    }
+schema: ResourcesByTypeSchema,
+    },
   );
 
   const searchResourcesByKeyword = tool(
@@ -146,6 +148,7 @@ Use when the patient asks about a specific condition, medication, or clinical te
 and you want any record mentioning it — regardless of resource type.
 
 Prefer get_resources_by_type when the resource type is already known.`,
+      schema: SearchResourcesSchema // ✅ Add schema
     }
   );
 
@@ -197,6 +200,7 @@ Example: SELECT id AS resource_id, resource_type FROM fhir_resources
 WHERE patient_id = :pid AND resource_type = 'Condition' LIMIT 10
 
 Incorrect: p.individual->>'display'`,
+      schema: ExecuteSqlSchema // ✅ Add schema
     }
   );
 
@@ -211,6 +215,7 @@ Incorrect: p.individual->>'display'`,
     {
       name: 'get_fhir_resources_schema_info',
       description: 'Get the schema information for the fhir_resources table.',
+      schema: z.object({}) // ✅ No input parameters
     }
   );
 
@@ -226,6 +231,7 @@ Incorrect: p.individual->>'display'`,
     {
       name: 'finish_with_answer',
       description: 'Always call last. For FHIR questions: cite inline as (Resource ID: <uuid>). Never return text without calling this.',
+      schema: FinishWithAnswerSchema // ✅ Add schema
     }
   );
 

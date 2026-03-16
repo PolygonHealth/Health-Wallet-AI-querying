@@ -9,13 +9,22 @@ export interface DatabasePool {
 
 class PostgreSQLPool implements DatabasePool {
   private pool: Pool;
+  private connected: boolean = false;
 
   constructor() {
     const poolConfig: PoolConfig = {
-      connectionString: config.databaseUrl,
+      // ✅ Use separate connection keys like admin server
+      host: 'database-1.ck8q5kci5t8d.us-east-2.rds.amazonaws.com',
+      user: 'polygon_map',
+      password: 'polygon!',
+      database: 'copy2',
+      port: 5432,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
+      ssl: {
+        rejectUnauthorized: false // ✅ Match admin server SSL config
+      }
     };
 
     this.pool = new Pool(poolConfig);
@@ -25,7 +34,23 @@ class PostgreSQLPool implements DatabasePool {
     });
   }
 
+  async ensureConnected() {
+    if (!this.connected) {
+      try {
+        const client = await this.pool.connect();
+        client.release();
+        this.connected = true;
+        logger.info('Database pool connected successfully');
+      } catch (error) {
+        logger.error('Failed to connect to database', error);
+        throw error;
+      }
+    }
+  }
+
   async query(text: string, params?: any[]) {
+    await this.ensureConnected(); // ✅ Ensure connection before query
+    
     const start = Date.now();
     try {
       const res = await this.pool.query(text, params);

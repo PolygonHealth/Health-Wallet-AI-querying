@@ -1,7 +1,7 @@
 import { BaseMessage } from '@langchain/core/messages';
 import { z } from 'zod';
 
-// Zod schema for LangGraph state
+// Zod schema for LangGraph state (simple version)
 export const StateSchema = z.object({
   messages: z.array(z.custom<BaseMessage>()),
   patientId: z.string().default(''),
@@ -32,8 +32,3 @@ export interface StreamEvent {
   data: any;
   timestamp: string;
 }
-
-// LangGraph state reducer for messages
-export const addMessages = (current: any[] = [], update: any[] = []): any[] => {
-  return [...current, ...update];
-};

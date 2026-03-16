@@ -5,6 +5,7 @@ import { MemorySaver, StateGraph, START, END } from '@langchain/langgraph';
 import { z } from 'zod';
 
 import { GraphState, StateSchema, StreamEvent } from './state';
+import { addMessages } from '@langchain/langgraph';
 import { createFHIRTools } from './tools';
 import { retryLLMCall } from '../utils/retry';
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
@@ -204,21 +205,9 @@ export function buildFHIRGraph(
 
     const response = await retryLLMCall(
       async () => {
-        // Debug model listing
-        await listModels();
-
-        // Test the model directly
-        const client = new GoogleGenAI({
-          apiKey: config.GEMINI_API_KEY,
-          apiVersion: 'v1alpha',
-        });
-        const resultTest = await client.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: "Say hello",
-        });
-        const result = await llmWithTools.invoke(messages)
-        return result
-      }, // Mirror Python: ainvoke
+        const result = await llmWithTools.invoke(messages); // Simple like Python!
+        return result;
+      },
       'llm_node'
     );
 
@@ -234,8 +223,20 @@ export function buildFHIRGraph(
     };
   };
 
-  // Use correct LangChain.js syntax
-  const workflow = new StateGraph(StateSchema)
+  // Use manual channel configuration with addMessages (version-compatible approach)
+  const workflow = new StateGraph({
+    channels: {
+      messages: {
+        default: () => [],
+        reducer: addMessages // ✅ Explicit message accumulator
+      },
+      patientId: { default: () => '' },
+      turnCount: { default: () => 0 },
+      tokensIn: { default: () => 0 },
+      tokensOut: { default: () => 0 },
+      onEvent: { default: () => undefined }
+    }
+  })
     .addNode("llm", llmNode)
     .addNode("tools", new ToolNode(tools)) // Using standard ToolNode for testing
     // .addNode("tools", streamingToolNode) // Commented out streaming version

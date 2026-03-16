@@ -9,6 +9,7 @@ import { queryRouter } from './routes/query';
 import { queryStreamRouter } from './routes/query-stream';
 import { healthRouter } from './routes/health';
 import { benchmarkRouter } from './routes/benchmark';
+import modelsRouter from './routes/models';
 
 export function createApp(): express.Application {
   setupLogging(config.LOG_LEVEL);
@@ -46,6 +47,10 @@ export function createApp(): express.Application {
         {
           name: 'Benchmark',
           description: 'Performance benchmarking tools',
+        },
+        {
+          name: 'Models',
+          description: 'Available AI models and model management',
         },
       ],
     },
@@ -93,6 +98,7 @@ export function createApp(): express.Application {
   app.use('/api/fhir', queryStreamRouter);
   app.use('/api/v1', benchmarkRouter);
   app.use('/api/fhir', healthRouter);
+  app.use('/api', modelsRouter);
 
   // Root endpoint
   app.get('/', (req, res) => {
@@ -103,6 +109,7 @@ export function createApp(): express.Application {
       query: '/api/fhir/query',
       queryStream: '/api/fhir/query-stream',
       benchmark: '/api/v1/benchmark',
+      models: '/api/models',
       docs: '/api-docs',
       version: '0.1.0',
     });

@@ -72,6 +72,116 @@ function routeAfterLLM(state: GraphState): string {
   return END;
 }
 
+// Create streaming tool node wrapper (moved outside buildFHIRGraph)
+const streamingToolNode = async (state: GraphState, tools: any[]) => {
+  const { onEvent } = state;
+  const lastMessage = state.messages[state.messages.length - 1];
+  const toolCalls = (lastMessage as any)?.tool_calls || [];
+  
+  // Emit events for each tool call
+  for (const toolCall of toolCalls) {
+    if (onEvent) {
+      let message: string;
+      
+      // Use switch for different tool messages
+      switch (toolCall.function.name) {
+        case 'get_patient_overview':
+          message = 'Retrieving patient overview...';
+          break;
+        case 'get_resources_by_type':
+          message = 'Fetching specific health data...';
+          break;
+        case 'search_resources_by_keyword':
+          message = 'Searching health records...';
+          break;
+        case 'execute_sql':
+          message = 'Analyzing health data...';
+          break;
+        case 'get_fhir_resources_schema_info':
+          message = 'Loading health record schema...';
+          break;
+        case 'finish_with_answer':
+          message = 'Finalizing your health analysis...';
+          break;
+        default:
+          message = 'Processing health data...';
+          break;
+      }
+      
+      onEvent({
+        type: 'tool_call',
+        data: {
+          toolName: toolCall.function.name,
+          message
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+  }
+
+  // Execute original tool node and return its result unchanged
+  const result = await new ToolNode(tools).invoke(state);
+  
+  // Emit completion events separately (don't modify result)
+  if (onEvent && toolCalls.length > 0) {
+    onEvent({
+      type: 'tool_result',
+      data: {
+        message: 'Health data retrieval complete',
+        toolCount: toolCalls.length
+      },
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  // Return tool result unchanged - Gemini 3 expects exact format
+  return result;
+};
+
+// Debug function to list available models
+async function listModels() {
+  const client = new GoogleGenAI({
+    apiKey: config.GEMINI_API_KEY,
+    apiVersion: 'v1alpha', // Try v1alpha to access 3.0 models like Python
+  });
+
+  // List available models to debug
+  console.log('=== DEBUGGING MODEL AVAILABILITY ===');
+  try {
+    // Use the correct ListModels method from the SDK
+    console.log('Fetching models using ai.models.list()...');
+    const modelsPager = await client.models.list();
+    console.log('Models pager created successfully');
+    
+    // Iterate through the pager to get actual models
+    console.log('Available models:');
+    let modelCount = 0;
+    for await (const model of modelsPager) {
+      modelCount++;
+      console.log(`${modelCount}. ${model.name} (${model.displayName || 'No display name'})   Description: ${model.description || 'No description'}`);
+      
+      // Show first few models only to avoid spam
+      // if (modelCount >= 10) {
+      //   console.log('... (showing first 10 models)');
+      //   break;
+      // }
+    }
+    
+    if (modelCount === 0) {
+      console.log('No models found or pager iteration failed');
+    }
+    
+  } catch (error: any) {
+    console.log('Error with ListModels:', error);
+    console.log('Error message:', error.message);
+    console.log('Error cause:', error.cause);
+    
+    // Fallback: try a direct model test
+    console.log('Falling back to direct model test...');
+  }
+  console.log('====================================');
+}
+
 export function buildFHIRGraph(
   dbPool: any,
   llm: BaseChatModel,
@@ -82,91 +192,6 @@ export function buildFHIRGraph(
   }
 
   const tools = createFHIRTools(dbPool);
-
-  // Create streaming tool node wrapper
-  const streamingToolNode = async (state: GraphState) => {
-    const { onEvent } = state;
-    const lastMessage = state.messages[state.messages.length - 1];
-    const toolCalls = (lastMessage as any)?.tool_calls || [];
-    
-    // Emit events for each tool call
-    for (const toolCall of toolCalls) {
-      if (onEvent) {
-        let message: string;
-        
-        // Use switch for different tool messages
-        switch (toolCall.function.name) {
-          case 'get_patient_overview':
-            message = 'Retrieving patient overview...';
-            break;
-          case 'get_resources_by_type':
-            message = 'Fetching specific health data...';
-            break;
-          case 'search_resources_by_keyword':
-            message = 'Searching health records...';
-            break;
-          case 'execute_sql':
-            message = 'Analyzing health data...';
-            break;
-          case 'get_fhir_resources_schema_info':
-            message = 'Loading health record schema...';
-            break;
-          case 'finish_with_answer':
-            message = 'Finalizing your health analysis...';
-            break;
-          default:
-            message = 'Processing health data...';
-            break;
-        }
-        
-        onEvent({
-          type: 'tool_call',
-          data: {
-            toolName: toolCall.function.name,
-            message
-          },
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-
-    // Execute original tool node
-    const result = await new ToolNode(tools).invoke(state);
-    
-    // Emit completion events
-    if (onEvent && toolCalls.length > 0) {
-      onEvent({
-        type: 'tool_result',
-        data: {
-          message: 'Health data retrieval complete',
-          toolCount: toolCalls.length
-        },
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    // Preserve onEvent callback in state
-    return {
-      ...result,
-      onEvent
-    };
-  };
-
-  // // DEBUG: Create LLM directly to test bindTools
-  // const debugLlm = new ChatGoogle({
-  //   model: 'gemini-2.5-flash',
-  //   temperature: 0.0,
-  //   maxOutputTokens: 8192,
-  // });
-
-  // console.log('=== DEBUG INFO ===');
-  // console.log('Original LLM type:', typeof llm);
-  // console.log('Original LLM constructor:', llm?.constructor?.name);
-  // console.log('Original bindTools exists:', typeof llm?.bindTools);
-  // console.log('Debug LLM type:', typeof debugLlm);
-  // console.log('Debug LLM constructor:', debugLlm.constructor.name);
-  // console.log('Debug bindTools exists:', typeof debugLlm.bindTools);
-  // console.log('==================');
 
   if (!llm || !llm.bindTools) {
     throw new Error('LLM is required');
@@ -179,16 +204,20 @@ export function buildFHIRGraph(
 
     const response = await retryLLMCall(
       async () => {
-        //test
-        // const client = new GoogleGenAI({
-        //   apiKey: 'AIzaSyDLqfLypdIeBRNrmlzapD_-GxjKtAvA578',
-        // });
+        // Debug model listing
+        await listModels();
 
-        // const result = await client.models.generateContent({
-        //   model: "gemini-2.5-flash",
-        //   contents: "Say hello",
-        // });
-        return llmWithTools.invoke(messages)
+        // Test the model directly
+        const client = new GoogleGenAI({
+          apiKey: config.GEMINI_API_KEY,
+          apiVersion: 'v1alpha',
+        });
+        const resultTest = await client.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: "Say hello",
+        });
+        const result = await llmWithTools.invoke(messages)
+        return result
       }, // Mirror Python: ainvoke
       'llm_node'
     );
@@ -208,7 +237,8 @@ export function buildFHIRGraph(
   // Use correct LangChain.js syntax
   const workflow = new StateGraph(StateSchema)
     .addNode("llm", llmNode)
-    .addNode("tools", streamingToolNode)
+    .addNode("tools", new ToolNode(tools)) // Using standard ToolNode for testing
+    // .addNode("tools", streamingToolNode) // Commented out streaming version
     .addEdge(START, "llm")
     .addEdge("tools", "llm")
     .addConditionalEdges("llm", routeAfterLLM);

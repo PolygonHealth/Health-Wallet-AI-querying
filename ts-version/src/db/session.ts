@@ -13,12 +13,12 @@ class PostgreSQLPool implements DatabasePool {
 
   constructor() {
     const poolConfig: PoolConfig = {
-      // ✅ Use separate connection keys like admin server
-      host: 'database-1.ck8q5kci5t8d.us-east-2.rds.amazonaws.com',
-      user: 'polygon_map',
-      password: 'polygon!',
-      database: 'copy2',
-      port: 5432,
+      // ✅ Use config values from environment (no defaults except port)
+      host: config.DB_HOST,
+      user: config.DB_USER,
+      password: config.DB_PASSWORD,
+      database: config.DB_NAME,
+      port: parseInt(config.DB_PORT || '5432'), // ✅ Default port only
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,

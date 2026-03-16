@@ -9,6 +9,11 @@ dotenv.config();
 const settingsSchema = z.object({
   // Database
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  DB_HOST: z.string().optional(),
+  DB_USER: z.string().optional(),
+  DB_PASSWORD: z.string().optional(),
+  DB_NAME: z.string().optional(),
+  DB_PORT: z.string().optional(),
   
   // AI Models
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY is required'),
@@ -17,7 +22,7 @@ const settingsSchema = z.object({
   
   // Default Settings
   DEFAULT_STRATEGY: z.string().default('langgraph'),
-  DEFAULT_MODEL: z.string().default('gemini-3.0-flash'),
+  DEFAULT_MODEL: z.string().default('gemini-3-flash-preview'),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   PORT: z.string().transform(Number).default('10000'),
   

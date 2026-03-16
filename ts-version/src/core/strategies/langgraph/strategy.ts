@@ -51,10 +51,18 @@ export class LanggraphStrategy implements BaseStrategy {
       });
       const formattedPrompt = SYSTEM_PROMPT.replace('{current_date}', currentDate);
       
-      const initialMessages = [
-        new SystemMessage(formattedPrompt),
-        new HumanMessage(context.queryText),
-      ];
+      // ✅ Check if conversation exists
+      const existingState = await this._graph.getState({ 
+        configurable: { thread_id: `patient-${context.patientId}` } 
+      });
+      
+      const hasExistingConversation = existingState?.values?.messages?.length > 0;
+      
+      // ✅ Fresh conversation: system message + human message
+      // ✅ Existing conversation: just human message (graph has the rest)
+      const initialMessages = hasExistingConversation
+        ? [new HumanMessage(context.queryText)]
+        : [new SystemMessage(formattedPrompt), new HumanMessage(context.queryText)];
 
       const initialState: ConversationState = {
         messages: initialMessages,
@@ -189,10 +197,18 @@ export class LanggraphStrategy implements BaseStrategy {
       });
       const formattedPrompt = SYSTEM_PROMPT.replace('{current_date}', currentDate);
       
-      const initialMessages = [
-        new SystemMessage(formattedPrompt),
-        new HumanMessage(context.queryText),
-      ];
+      // ✅ Check if conversation exists
+      const existingState = await this._graph.getState({ 
+        configurable: { thread_id: `patient-${context.patientId}` } 
+      });
+      
+      const hasExistingConversation = existingState?.values?.messages?.length > 0;
+      
+      // ✅ Fresh conversation: system message + human message
+      // ✅ Existing conversation: just human message (graph has the rest)
+      const initialMessages = hasExistingConversation
+        ? [new HumanMessage(context.queryText)]
+        : [new SystemMessage(formattedPrompt), new HumanMessage(context.queryText)];
 
       const initialState: ConversationState = {
         messages: initialMessages,

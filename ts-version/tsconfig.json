@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2021",
+    "lib": ["ES2021"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "checkJs": false,
+    "outDir": "./dist",
+    "sourceMap": true,
+    "incremental": true,
+    "noEmitOnError": false,
+    "forceConsistentCasingInFileNames": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "resolveJsonModule": true,
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"],
+      "@/core/*": ["core/*"],
+      "@/api/*": ["api/*"],
+      "@/db/*": ["db/*"],
+      "@/llm/*": ["llm/*"],
+      "@/config/*": ["config/*"],
+      "@/benchmark/*": ["benchmark/*"]
+    }
+  },
+  "include": [
+    "src/**/*",
+    ".env.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts"
+  ]
+}

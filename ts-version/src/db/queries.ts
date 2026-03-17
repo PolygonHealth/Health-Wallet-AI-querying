@@ -22,7 +22,7 @@ export async function getAllFHIRByPatient(db: DatabasePool, patientId: string): 
     received_at: r.received_at ? String(r.received_at) : "",
   }));
 
-  logger.info(`fhir_query_complete | patient_id=${patientId} | row_count=${rows.length}`);
+  logger.info(`getAllFHIRByPatient completed | patient_id=${patientId} | row_count=${rows.length}`);
   return rows;
 }
 
@@ -80,7 +80,7 @@ export async function getFHIRByType(
       received_at: r.received_at ? String(r.received_at) : "",
     }));
 
-    logger.info(`fhir_query_complete | patient_id=${patientId} | row_count=${rows.length}`);
+    logger.info(`getFHIRByType completed | patient_id=${patientId} | row_count=${rows.length}`);
     return rows;
   } catch (error) {
     logger.warning(

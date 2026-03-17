@@ -32,7 +32,7 @@ async def get_all_fhir_by_patient(db: AsyncSession, patient_id: str) -> list[dic
         for r in result.fetchall()
     ]
     logger.info(
-        "fhir_query_complete | patient_id=%s | row_count=%d", patient_id, len(rows)
+        "get_all_fhir_by_patient completed | patient_id=%s | row_count=%d", patient_id, len(rows)
     )
     return rows
 
@@ -128,7 +128,7 @@ async def get_fhir_by_type(
         for r in rows
     ]
     logger.info(
-        "fhir_query_complete | patient_id=%s | row_count=%d", patient_id, len(out)
+        "get_fhir_by_type completed | patient_id=%s | row_count=%d", patient_id, len(out)
     )
     return out
 

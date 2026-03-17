@@ -111,7 +111,8 @@ function getSessionFactory() {
 function sendSSEEvent(res: Response, event: StreamEvent) {
   // const eventData = `data: ${JSON.stringify(event.data.message)}\n\n`;
   // res.write(eventData);
-   res.write(`event: ${event.type}\ndata: ${JSON.stringify({message: event.data.message})}\n\n`);
+  const data = event.data?.message ? { message: event.data.message } : { reply: event.data?.reply };
+  res.write(`event: ${event.type}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
 function sendSSE(res: Response, event: string, data: any) {
@@ -162,7 +163,7 @@ router.post('/query-stream', async (req: Request, res: Response) => {
       });
       sendSSEEvent(res, {
         type: 'done',
-        data: { message: result.responseText },
+        data: { reply: result.responseText },
         timestamp: new Date().toISOString()
       });
       res.end();

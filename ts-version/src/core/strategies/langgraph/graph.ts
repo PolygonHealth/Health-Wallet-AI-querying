@@ -91,7 +91,7 @@ const getStreamingToolNode = (tools: any[]) => {
             message = 'Retrieving overview...';
             break;
           case 'get_resources_by_type':
-            message = 'Fetching requested records...';
+            message = `Fetching requested ${toolCall.args?.resourceType} records...`;
             break;
           case 'search_resources_by_keyword':
             message = 'Searching health records...';
@@ -206,15 +206,15 @@ export function buildFHIRGraph(
     const { onEvent } = state;
 
     // Emit thinking event before LLM invocation
-    if (onEvent) {
-      onEvent({
-        type: 'status',
-        data: {
-          message: 'Thinking...'
-        },
-        timestamp: new Date().toISOString()
-      });
-    }
+    // if (onEvent) {
+    //   onEvent({
+    //     type: 'status',
+    //     data: {
+    //       message: 'Thinking...'
+    //     },
+    //     timestamp: new Date().toISOString()
+    //   });
+    // }
 
     const response = await retryLLMCall(
       async () => {

@@ -84,36 +84,36 @@ const getStreamingToolNode = (tools: any[]) => {
     for (const toolCall of toolCalls) {
       if (onEvent) {
         let message: string;
-
+        const toolName = toolCall.name;
         // Use switch for different tool messages
-        switch (toolCall.function.name) {
+        switch (toolName) {
           case 'get_patient_overview':
-            message = 'Retrieving patient overview...';
+            message = 'Retrieving overview...';
             break;
           case 'get_resources_by_type':
-            message = 'Fetching specific health data...';
+            message = 'Fetching requested records...';
             break;
           case 'search_resources_by_keyword':
             message = 'Searching health records...';
             break;
           case 'execute_sql':
-            message = 'Analyzing health data...';
+            message = 'Analyzing...';
             break;
-          case 'get_fhir_resources_schema_info':
-            message = 'Loading health record schema...';
+          // case 'get_fhir_resources_schema_info':
+          //   message = 'Loading health record schema...';
             break;
           case 'finish_with_answer':
-            message = 'Finalizing your health analysis...';
+            message = 'Finalizing response...';
             break;
           default:
-            message = 'Processing health data...';
+            message = 'Processing health record data...';
             break;
         }
 
         onEvent({
           type: 'tool_call',
           data: {
-            toolName: toolCall.function.name,
+            toolName,
             message
           },
           timestamp: new Date().toISOString()
@@ -124,17 +124,17 @@ const getStreamingToolNode = (tools: any[]) => {
     // Execute original tool node and return its result unchanged
     const result = await new ToolNode(tools).invoke(state);
 
-    // Emit completion events separately (don't modify result)
-    if (onEvent && toolCalls.length > 0) {
-      onEvent({
-        type: 'tool_result',
-        data: {
-          message: 'Health data retrieval complete',
-          toolCount: toolCalls.length
-        },
-        timestamp: new Date().toISOString()
-      });
-    }
+    // // Emit completion events separately (don't modify result)
+    // if (onEvent && toolCalls.length > 0) {
+    //   onEvent({
+    //     type: 'tool_result',
+    //     data: {
+    //       message: 'Health data retrieval complete',
+    //       toolCount: toolCalls.length
+    //     },
+    //     timestamp: new Date().toISOString()
+    //   });
+    // }
 
     // Return tool result unchanged - Gemini 3 expects exact format
     return result;

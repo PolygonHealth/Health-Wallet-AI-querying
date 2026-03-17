@@ -108,7 +108,7 @@ function getSessionFactory() {
 }
 
 function sendSSEEvent(res: Response, event: StreamEvent) {
-  const eventData = `data: ${JSON.stringify(event)}\n\n`;
+  const eventData = `data: ${JSON.stringify(event.data.message)}\n\n`;
   res.write(eventData);
 }
 
@@ -145,7 +145,7 @@ router.post('/query-stream', async (req: Request, res: Response) => {
       });
 
       // Execute strategy with streaming
-      const result = await (strategy as any).executeWithStreaming(context, (event: StreamEvent) => {
+      const result = await (strategy as any).execute(context, (event: StreamEvent) => {
         sendSSEEvent(res, event);
       });
 

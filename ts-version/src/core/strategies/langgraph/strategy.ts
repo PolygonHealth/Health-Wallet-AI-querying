@@ -193,7 +193,7 @@ export class LanggraphStrategy implements BaseStrategy {
     }
   }
 
-  async execute(context: QueryContext): Promise<QueryResult> {
+  async execute(context: QueryContext, onEvent?: (event: StreamEvent) => void): Promise<QueryResult> {
     const resourceTypesCollector: Set<string> = new Set();
     setRunContext(context.patientId, resourceTypesCollector);
 
@@ -227,6 +227,7 @@ export class LanggraphStrategy implements BaseStrategy {
         turnCount: 0,
         tokensIn: 0,
         tokensOut: 0,
+        onEvent, // Pass callback through state for tool-level streaming
       };
 
       const config = { configurable: { thread_id: `patient-${context.patientId}` } };

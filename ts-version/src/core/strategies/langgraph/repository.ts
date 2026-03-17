@@ -171,53 +171,53 @@ export class FhirRepository {
     );
   }
 
-  async getFHIRUISummaryDataByPatientId( PatientId: string): Promise<string> {
-     try {
-      const data = await getFHIRUISummaryDataByPatientId(this.db, PatientId);
-      return JSON.stringify(data, (key, value) =>
-        value instanceof Date ? value.toISOString() : value
-      );
-    } catch (error) {
-      logger.error('repo_error | method=getFHIRUISummaryDataByPatientId | error=%s', error);
-      throw error;
-    }
-  }
+  // async getFHIRUISummaryDataByPatientId(): Promise<string> {
+  //   try {
+  //     const data = await getFHIRUISummaryDataByPatientId(this.db, this.patient_id);
+  //     return JSON.stringify(data, (key, value) =>
+  //       value instanceof Date ? value.toISOString() : value
+  //     );
+  //   } catch (error) {
+  //     logger.error('repo_error | method=getFHIRUISummaryDataByPatientId | error=%s', error);
+  //     throw error;
+  //   }
+  // }
 
 
-// --- Build context: full details for relevant categories, summaries for others ---
-async buildContextForLinks(PatientId: string, relevantCategories: string[]  ) {
-   try {
-      const fhirData = await getFHIRUISummaryDataByPatientId(this.db, PatientId);
-  const context: any = {
-    patient: {
-      name: fhirData.name,
-      gender: fhirData.gender,
-      birth_date: fhirData.birth_date,
-      patient_id: fhirData.patient_id,
-    },
-  };
+  // --- Build context: full details for relevant categories, summaries for others ---
+  async buildContextForLinks(relevantCategories: string[]) {
+    try {
+      const fhirData = await getFHIRUISummaryDataByPatientId(this.db, this.patient_id);
+      const context: any = {
+        patient: {
+          name: fhirData.name,
+          gender: fhirData.gender,
+          birth_date: fhirData.birth_date,
+          patient_id: fhirData.patient_id,
+        },
+      };
 
-  for (const cat of RESOURCE_CATEGORIES) {
-    const data = fhirData[cat] || [];
-    if (relevantCategories.includes(cat)) {
-      // Full data with details for relevant categories
-      context[cat] = data;
-    } else {
-      // Lightweight summaries for non-relevant categories
-      context[cat + '_summary'] = data.map((item: any) => ({
-        name: item.name,
-        start: item.start,
-        ...(item.status && { status: item.status }),
-      }));
-    }
-  }
+      for (const cat of RESOURCE_CATEGORIES) {
+        const data = fhirData[cat] || [];
+        if (relevantCategories.includes(cat)) {
+          // Full data with details for relevant categories
+          context[cat] = data;
+        } else {
+          // Lightweight summaries for non-relevant categories
+          context[cat + '_summary'] = data.map((item: any) => ({
+            name: item.name,
+            start: item.start,
+            ...(item.status && { status: item.status }),
+          }));
+        }
+      }
 
-  return context;
+      return { context };
     } catch (error) {
       logger.error('repo_error | method=buildContextForLinks | error=%s', error);
       throw error;
     }
-}
+  }
 
 
 }

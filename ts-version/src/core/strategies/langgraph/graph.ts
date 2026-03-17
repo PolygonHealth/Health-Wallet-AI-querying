@@ -91,7 +91,7 @@ const getStreamingToolNode = (tools: any[]) => {
             message = 'Retrieving overview...';
             break;
           case 'get_resources_by_type':
-            message = `Fetching requested ${toolCall.args?.resourceType} records...`;
+            message = `Fetching ${toolCall.args?.resourceType} records...`;
             break;
           case 'search_resources_by_keyword':
             message = 'Searching health records...';

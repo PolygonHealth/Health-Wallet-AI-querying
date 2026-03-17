@@ -2,6 +2,18 @@ import { Pool, PoolConfig } from 'pg';
 import { config } from '../config/settings';
 import { logger } from '../config/logging';
 
+function formatError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      ...(error as any),
+    };
+  }
+  return { message: String(error) };
+}
+
 export interface DatabasePool {
   query(text: string, params?: any[]): Promise<any>;
   end(): Promise<void>;
@@ -42,7 +54,7 @@ class PostgreSQLPool implements DatabasePool {
         this.connected = true;
         logger.info('Database pool connected successfully');
       } catch (error) {
-        logger.error('Failed to connect to database', error);
+        logger.error('Failed to connect to database', { error: formatError(error) });
         throw error;
       }
     }
@@ -59,7 +71,7 @@ class PostgreSQLPool implements DatabasePool {
       return res;
     } catch (error) {
       const duration = Date.now() - start;
-      logger.error('Query failed', { text, duration, error });
+      logger.error('Query failed', { text, duration, error: formatError(error) });
       throw error;
     }
   }

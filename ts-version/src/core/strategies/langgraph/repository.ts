@@ -32,7 +32,7 @@ function truncate(data: any, toolName: string): string {
     return jsonStr;
   }
 
-  logger.warning(
+  logger.warn(
     `tool_result_truncated | tool=${toolName} | size=${jsonStr.length} | cap=${MAX_SINGLE_TOOL_CHARS}`
   );
   
@@ -61,8 +61,10 @@ export class FhirRepository {
       const types = (data.by_type || []).map((row: any) => row.resource_type);
       return [truncate(data, 'get_patient_overview'), types];
     } catch (error) {
-      logger.error('repo_error | method=get_patient_overview | error=%s', error);
-      throw new Error(`Failed to get patient overview for patient ${this.patient_id}: ${error}`);
+      logger.error(
+        `repo_error | method=get_patient_overview | patient_id=${this.patient_id} | error=${String(error)}`
+      );
+      throw new Error(`Failed to get patient overview for patient ${this.patient_id}: ${String(error)}`);
     }
   }
 
@@ -83,9 +85,7 @@ export class FhirRepository {
       ];
     } catch (error) {
       logger.error(
-        'repo_error | method=get_resources_by_type | type=%s | error=%s',
-        resource_type,
-        error
+        `repo_error | method=get_resources_by_type | patient_id=${this.patient_id} | type=${resource_type} | error=${String(error)}`
       );
       return [JSON.stringify({ error: String(error) }), [], []];
     }
@@ -108,9 +108,7 @@ export class FhirRepository {
       ];
     } catch (error) {
       logger.error(
-        'repo_error | method=get_resources_by_keyword | keyword=%s | error=%s',
-        keyword,
-        error
+        `repo_error | method=get_resources_by_keyword | patient_id=${this.patient_id} | keyword=${keyword} | error=${String(error)}`
       );
       return [JSON.stringify({ error: String(error) }), [], []];
     }
@@ -119,7 +117,7 @@ export class FhirRepository {
   async getResourcesByRawSQL(sql: string): Promise<[string, string[], string[]]> {
     /**Returns (json_result, resource_ids, resource_types). Validates SQL first.*/
     try {
-      const validated = validateSQL(sql);
+      sql = validateSQL(sql);
     } catch (error) {
       if (error instanceof SQLValidationError) {
         return [JSON.stringify({ error: error.message }), [], []];
@@ -128,7 +126,7 @@ export class FhirRepository {
     }
 
     try {
-      const rows = await executeRawSQL(this.db, sql, { pid: this.patient_id });
+      const rows = await executeRawSQL(this.db, sql, [this.patient_id]);
       const ids = rows
         .map((r: any) => String(r.resource_id || r.id))
         .filter(Boolean);
@@ -140,7 +138,9 @@ export class FhirRepository {
         types,
       ];
     } catch (error) {
-      logger.error('repo_error | method=get_resources_by_raw_sql | error=%s', error);
+      logger.error(
+        `repo_error | method=get_resources_by_raw_sql | patient_id=${this.patient_id} | error=${String(error)}`
+      );
       return [JSON.stringify({ error: String(error) }), [], []];
     }
   }
@@ -153,7 +153,9 @@ export class FhirRepository {
         value instanceof Date ? value.toISOString() : value
       );
     } catch (error) {
-      logger.error('repo_error | method=get_fhir_resources_schema_info | error=%s', error);
+      logger.error(
+        `repo_error | method=get_fhir_resources_schema_info | patient_id=${this.patient_id} | error=${String(error)}`
+      );
       throw error;
     }
   }

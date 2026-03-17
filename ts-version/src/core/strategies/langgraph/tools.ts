@@ -35,7 +35,10 @@ const SearchResourcesSchema = z.object({
 });
 
 const ExecuteSqlSchema = z.object({
-  sql: z.string().describe(`SELECT query using :pid for patient_id. Example: SELECT id AS resource_id, resource_type FROM fhir_resources WHERE patient_id = :pid AND resource_type = 'Condition' LIMIT 10`)
+  sql: z.string().describe(
+    `SELECT query using $1 for patient_id (pg positional params). ` +
+    `Example: SELECT id AS resource_id, resource_type FROM fhir_resources WHERE patient_id = $1 AND resource_type = 'Condition' LIMIT 10`
+  )
 });
 
 const FinishWithAnswerSchema = z.object({
@@ -48,8 +51,14 @@ export function createFHIRTools(
 ) {
   const getPatientOverview = tool(
     async () => {
-      /**
-        Call this FIRST when the patient asks about health records, clinical data, or FHIR —
+      const repo = _fhirResourcesRepo(dbPool);
+      const [result, types] = await repo.getPatientOverview();
+      _collect(types);
+      return result;
+    },
+    {
+      name: 'get_patient_overview',
+      description: `Call this FIRST when the patient asks about health records, clinical data, or FHIR —
         and you don't yet know what data exists. Returns a lightweight summary of available resource types and date ranges.
 
         fhir_resources table columns: 
@@ -62,49 +71,15 @@ export function createFHIRTools(
         - received_at (TIMESTAMP)
         - kno2_request_ref (BOOLEAN)
         - has_document_text (BOOLEAN)
-        
-        Returns counts and date ranges. No clinical content.
-      */
-      const repo = _fhirResourcesRepo(dbPool);
-      const [result, types] = await repo.getPatientOverview();
-      _collect(types);
-      return result;
-    },
-    {
-      name: 'get_patient_overview',
-      description: `Call this FIRST when the patient asks about health records, clinical data, or FHIR —
-and you don't yet know what data exists. Returns a lightweight summary of available resource types and date ranges.
-
-fhir_resources table columns: 
-- id (UUID PK)
-- patient_id (UUID)
-- resource_type (TEXT)
-- fhir_id (TEXT)
-- fhir_version (TEXT)
-- resource (JSONB)
-- received_at (TIMESTAMP)
-- kno2_request_ref (BOOLEAN)
-- has_document_text (BOOLEAN)
-        
-Returns counts and date ranges. No clinical content.`,
-      //schema: z.object({}) // ✅ No input parameters
+                
+        Returns counts and date ranges. No clinical content.`,
+      schema: z.object({})
     }
   );
 
   const getResourcesByType = tool(
     async (input) => {
       const { resourceType, limit = DEFAULT_RESOURCE_LIMIT } = ResourcesByTypeSchema.parse(input);
-      /**
-        Fetch FHIR resources of a specific type for the patient.
-
-        Use when you know which resource type to fetch — either because the patient asked
-        about it directly, or because get_patient_overview confirmed it exists.
-
-        Prefer this over `execute_sql` for all standard resource type queries.
-
-        resource_type must be exact and singular: Condition, Observation,
-        MedicationRequest, AllergyIntolerance, Procedure, DiagnosticReport, etc.
-      */
       const repo = _fhirResourcesRepo(dbPool);
       const [result, resourceIds, types] = await repo.getResourcesByType(resourceType, limit);
       _collect(types);
@@ -113,28 +88,20 @@ Returns counts and date ranges. No clinical content.`,
     {
       name: 'get_resources_by_type',
       description: `Fetch FHIR resources of a specific type for the patient. 
-Use when you know which resource type to fetch — either because the patient asked
-about it directly, or because get_patient_overview confirmed it exists.
+      Use when you know which resource type to fetch — either because the patient asked
+      about it directly, or because 'get_patient_overview' confirmed it exists.
 
-Prefer this over execute_sql for all standard resource type queries.
+      Prefer this over 'execute_sql' for all standard resource type queries.
 
-resource_type must be exact and singular: Condition, Observation,
-MedicationRequest, AllergyIntolerance, Procedure, DiagnosticReport, etc.`,
-schema: ResourcesByTypeSchema,
+      resource_type must be exact and singular: Condition, Observation,
+      MedicationRequest, AllergyIntolerance, Procedure, DiagnosticReport, etc.`,
+      schema: ResourcesByTypeSchema,
     },
   );
 
   const searchResourcesByKeyword = tool(
     async (input) => {
       const { keyword, limit = DEFAULT_KEYWORD_LIMIT } = SearchResourcesSchema.parse(input);
-      /**
-        Search across all FHIR resources by keyword (case-insensitive JSON content match).
-
-        Use when the patient asks about a specific condition, medication, or clinical term
-        and you want any record mentioning it — regardless of resource type.
-
-        Prefer get_resources_by_type when the resource type is already known.
-      */
       const repo = _fhirResourcesRepo(dbPool);
       const [result, resourceIds, types] = await repo.getResourcesByKeyword(keyword, limit);
       _collect(types);
@@ -144,37 +111,17 @@ schema: ResourcesByTypeSchema,
       name: 'search_resources_by_keyword',
       description: `Search across all FHIR resources by keyword (case-insensitive JSON content match).
 
-Use when the patient asks about a specific condition, medication, or clinical term
-and you want any record mentioning it — regardless of resource type.
+      Use when the patient asks about a specific condition, medication, or clinical term
+      and you want any record mentioning it — regardless of resource type.
 
-Prefer get_resources_by_type when the resource type is already known.`,
-      schema: SearchResourcesSchema // ✅ Add schema
+      Prefer 'get_resources_by_type' when the resource type is already known.`,
+      schema: SearchResourcesSchema
     }
   );
 
   const executeSql = tool(
     async (input) => {
       const { sql } = ExecuteSqlSchema.parse(input);
-      /**
-        Use ONLY if get_resources_by_type or search_resources_by_keyword cannot answer 
-        (e.g. complex filtering, aggregation, joins). 
-        Write a PostgreSQL SELECT query over the fhir_resources table only. 
-        Use :pid for patient_id (never hardcode). LIMIT is required (max 50).
-
-        resource is JSONB. Access fields using -> or ->> (NOT dot notation).
-        When using jsonb_array_elements(), the alias is a JSON value, so use -> / ->>.
-
-        EXAMPLES:
-        SELECT id AS resource_id, p->'individual'->>'display'
-        FROM fhir_resources, jsonb_array_elements(resource->'participant') AS p
-        WHERE id = <uuid>
-
-        SELECT query using :pid for patient_id. 
-        Example: SELECT id AS resource_id, resource_type FROM fhir_resources 
-        WHERE patient_id = :pid AND resource_type = 'Condition' LIMIT 10
-
-        Incorrect: p.individual->>'display'
-      */
       const repo = _fhirResourcesRepo(dbPool);
       const [result, resourceIds, types] = await repo.getResourcesByRawSQL(sql);
       _collect(types);
@@ -183,55 +130,49 @@ Prefer get_resources_by_type when the resource type is already known.`,
     {
       name: 'execute_sql',
       description: `Use ONLY if get_resources_by_type or search_resources_by_keyword cannot answer 
-(e.g. complex filtering, aggregation, joins). 
-Write a PostgreSQL SELECT query over the fhir_resources table only. 
-Use :pid for patient_id (never hardcode). LIMIT is required (max ${SQL_MAX_ROWS}).
+      (e.g. complex filtering, aggregation, joins). 
+      Write a PostgreSQL SELECT query over the fhir_resources table only. 
+      Use $1 for patient_id (never hardcode). LIMIT is required (max ${SQL_MAX_ROWS}).
 
-resource is JSONB. Access fields using -> or ->> (NOT dot notation).
-When using jsonb_array_elements(), the alias is a JSON value, so use -> / ->>.
+      resource is JSONB. Access fields using -> or ->> (NOT dot notation).
+      When using jsonb_array_elements(), the alias is a JSON value, so use -> / ->>.
 
-EXAMPLES:
-SELECT id AS resource_id, p->'individual'->>'display'
-FROM fhir_resources, jsonb_array_elements(resource->'participant') AS p
-WHERE id = <uuid>
+      EXAMPLES:
+      SELECT id AS resource_id, p->'individual'->>'display'
+      FROM fhir_resources, jsonb_array_elements(resource->'participant') AS p
+      WHERE id = <uuid>
 
-SELECT query using :pid for patient_id. 
-Example: SELECT id AS resource_id, resource_type FROM fhir_resources 
-WHERE patient_id = :pid AND resource_type = 'Condition' LIMIT 10
+      SELECT query using $1 for patient_id. 
+      Example: SELECT id AS resource_id, resource_type FROM fhir_resources 
+      WHERE patient_id = $1 AND resource_type = 'Condition' LIMIT 10
 
-Incorrect: p.individual->>'display'`,
-      schema: ExecuteSqlSchema // ✅ Add schema
+      Incorrect: p.individual->>'display'`,
+      schema: ExecuteSqlSchema
     }
   );
 
   const getFhirResourcesSchemaInfo = tool(
     async () => {
-      /**
-        Get the schema information for the fhir_resources table.
-      */
       const repo = _fhirResourcesRepo(dbPool);
       return await repo.getFhirResourcesSchemaInfo();
     },
     {
       name: 'get_fhir_resources_schema_info',
       description: 'Get the schema information for the fhir_resources table.',
-      schema: z.object({}) // ✅ No input parameters
+      schema: z.object({})
     }
   );
 
   const finishWithAnswer = tool(
     async (input) => {
       const { answer, resource_ids } = FinishWithAnswerSchema.parse(input);
-      /**
-        Always call last. For FHIR questions: cite inline as (Resource ID: <uuid>). Never return text without calling this.
-      */
       const repo = _fhirResourcesRepo(dbPool);
       return repo.getFinalAnswer(answer, resource_ids || []);
     },
     {
       name: 'finish_with_answer',
       description: 'Always call last. For FHIR questions: cite inline as (Resource ID: <uuid>). Never return text without calling this.',
-      schema: FinishWithAnswerSchema // ✅ Add schema
+      schema: FinishWithAnswerSchema
     }
   );
 

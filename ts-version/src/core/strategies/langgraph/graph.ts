@@ -47,7 +47,7 @@ function extractUsage(usage: any, response: AIMessage, llm: BaseChatModel, messa
       const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content || '');
       deltaOut = (llm as any).get_num_tokens ? (llm as any).get_num_tokens(content) : 0;
     } catch (error) {
-      logger.warning('failed_to_extract_token_usage', { error: String(error) });
+      logger.warn('failed_to_extract_token_usage', { error: String(error) });
     }
   }
 
@@ -88,7 +88,7 @@ const getStreamingToolNode = (tools: any[]) => {
         // Use switch for different tool messages
         switch (toolName) {
           case 'get_patient_overview':
-            message = 'Retrieving overview...';
+            message = 'Retrieving your info...';
             break;
           case 'get_resources_by_type':
             message = `Reading ${toolCall.args?.resourceType} records...`;
@@ -99,8 +99,8 @@ const getStreamingToolNode = (tools: any[]) => {
           case 'execute_sql':
             message = 'Analyzing...';
             break;
-          // case 'get_fhir_resources_schema_info':
-          //   message = 'Loading health record schema...';
+          case 'get_fhir_resources_schema_info':
+            message = 'Loading health record schema...';
             break;
           case 'finish_with_answer':
             message = 'Finalizing response...';
@@ -218,7 +218,7 @@ export function buildFHIRGraph(
 
     const response = await retryLLMCall(
       async () => {
-        const result = await llmWithTools.invoke(messages); // Simple like Python!
+        const result = await llmWithTools.invoke(messages);
         return result;
       },
       'llm_node'

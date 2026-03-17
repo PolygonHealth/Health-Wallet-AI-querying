@@ -26,7 +26,7 @@ export async function retryLLMCall<T>(
       }
 
       const delay = extractRetryDelay(e) || (RETRY_BASE_DELAY * Math.pow(2, attempt));
-      logger.warning(
+      logger.warn(
         `retry_scheduled | call=${callDescription} | attempt=${attempt + 1} | status=${status} | delay_s=${Math.round(delay)}`
       );
       

@@ -25,9 +25,9 @@ const FORBIDDEN_PATTERNS = [
 // Extract table names from FROM and JOIN clauses (simple pattern)
 const TABLE_PATTERN = /\b(?:from|join)\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi;
 // Match LIMIT N
-const LIMIT_PATTERN = /\blimit\s+(\d+)\b/gi;
-// Require :pid for parameterized patient scoping
-const PID_REQUIRED = /:pid\b/;
+const LIMIT_PATTERN = /\blimit\s+(\d+)\b/i;
+// Require $1 for parameterized patient scoping (pg positional params)
+const PID_REQUIRED = /\bpatient_id\s*=\s*\$1\b/i;
 // LLM often writes resource_id but fhir_resources has column id. Rewrite in SELECT list.
 const RESOURCE_ID_IN_SELECT = /((?:,\s*)|\bSELECT\s+)\bid\b(?!\s+AS\s+\w+|\s*,|\s*FROM)/gi;
 
@@ -54,7 +54,7 @@ const JSONB_ARROW_BEFORE_STRING_OP = /->'[^']+'\s+(ILIKE|LIKE|NOT\s+LIKE|NOT\s+I
 // ---------------------------------------------------------------------------
  
 // Matches the SELECT column list slice (between SELECT and FROM).
-const SELECT_COLS_RE = /(SELECT\s+)(.+?)(\s+FROM\b)/gi;
+const SELECT_COLS_RE = /(SELECT\s+)(.+?)(\s+FROM\b)/i;
  
 // Matches bare `resource_id` in the column list (the hallucinated column name).
 // Excludes qualified forms like `t.resource_id`.
@@ -131,10 +131,10 @@ export function validateSQL(sql: string): string {
     );
   }
 
-  // Require :pid for patient scoping
+  // Require $1 for patient scoping
   if (!PID_REQUIRED.test(sql)) {
     throw new SQLValidationError(
-      'SQL must use :pid parameter for patient_id. Example: WHERE patient_id = :pid'
+      'SQL must scope to the current patient using $1. Example: WHERE patient_id = $1'
     );
   }
 
@@ -149,6 +149,11 @@ export function validateSQL(sql: string): string {
   }
 
   // Enforce LIMIT
+  const limitKeywordCount = (sql.match(/\blimit\b/gi) || []).length;
+  if (limitKeywordCount > 1) {
+    throw new SQLValidationError('SQL contains multiple LIMIT clauses. Use exactly one LIMIT.');
+  }
+
   const limitMatch = LIMIT_PATTERN.exec(sql);
   if (limitMatch) {
     const limitVal = parseInt(limitMatch[1]);

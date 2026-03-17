@@ -1,5 +1,17 @@
 import { logger } from '../config/logging';
 
+function formatError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      ...(error as any),
+    };
+  }
+  return { message: String(error) };
+}
+
 export interface DatabasePool {
   query(text: string, params?: any[]): Promise<any>;
   end(): Promise<void>;
@@ -83,7 +95,7 @@ export async function getFHIRByType(
     logger.info(`getFHIRByType completed | patient_id=${patientId} | row_count=${rows.length}`);
     return rows;
   } catch (error) {
-    logger.warning(
+    logger.warn(
       `fhir_query_failed | patient_id=${patientId} | filter=${resourceType} | error=${String(error)}`
     );
     throw error;
@@ -118,7 +130,7 @@ export async function searchResourcesByKeyword(
     logger.info(`fhir_search_complete | patient_id=${patientId} | row_count=${rows.length}`);
     return rows;
   } catch (error) {
-    logger.warning(
+    logger.warn(
       `fhir_search_failed | patient_id=${patientId} | keyword=${keyword} | error=${String(error)}`
     );
     throw error;
@@ -150,7 +162,7 @@ export async function executeRawSQL(
 
     return out;
   } catch (error) {
-    logger.warning(`sql_execute_failed | error=${String(error)} | sql=${sql}`);
+    logger.warn('sql_execute_failed', { sql, error: formatError(error) });
     throw error;
   }
 }

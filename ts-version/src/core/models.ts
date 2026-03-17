@@ -28,7 +28,7 @@ export const QueryResultSchema = z.object({
 export type QueryResult = z.infer<typeof QueryResultSchema>;
 
 export const QueryRequestSchema = z.object({
-  patientId: z.string().min(1),
+  patientId: z.string().optional(),
   query: z.string().min(1),
   strategy: z.string().optional(),
   model: z.string().optional(),

@@ -5,6 +5,7 @@ import { logger } from '../../config/logging';
 import { getDbPool } from '@/db/session';
 import { config } from '@/config/settings';
 import { StreamEvent } from '../../core/strategies/langgraph/state';
+import { getPatientIdFromHeaders } from '../utils/patientId';
 
 const router = Router();
 
@@ -108,8 +109,13 @@ function getSessionFactory() {
 }
 
 function sendSSEEvent(res: Response, event: StreamEvent) {
-  const eventData = `data: ${JSON.stringify(event.data.message)}\n\n`;
-  res.write(eventData);
+  // const eventData = `data: ${JSON.stringify(event.data.message)}\n\n`;
+  // res.write(eventData);
+   res.write(`event: ${event.type}\ndata: ${JSON.stringify({message: event.data.message})}\n\n`);
+}
+
+function sendSSE(res: Response, event: string, data: any) {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
 router.post('/query-stream', async (req: Request, res: Response) => {
@@ -126,19 +132,25 @@ router.post('/query-stream', async (req: Request, res: Response) => {
     // Validate request
     const validatedQuery = QueryRequestSchema.parse(req.body);
     
-    const strategyName = validatedQuery.strategy || config.DEFAULT_STRATEGY;
-    const modelName = validatedQuery.model || config.DEFAULT_MODEL;
-
-    // Get session factory
-    const sessionFactory = getSessionFactory();
-
     try {
+      // Get patientId from request body or headers
+      let patientId = validatedQuery.patientId;
+      if (!patientId) {
+        patientId = await getPatientIdFromHeaders(req);
+      }
+      
+      const strategyName = validatedQuery.strategy || config.DEFAULT_STRATEGY;
+      const modelName = validatedQuery.model || config.DEFAULT_MODEL;
+
+      // Get session factory
+      const sessionFactory = getSessionFactory();
+
       // Resolve strategy
       const strategy = resolveStrategy(strategyName, sessionFactory, modelName);
       
       // Create context
       const context = QueryContextSchema.parse({
-        patientId: validatedQuery.patientId,
+        patientId,
         queryText: validatedQuery.query,
         strategyName,
         modelName,
@@ -148,7 +160,11 @@ router.post('/query-stream', async (req: Request, res: Response) => {
       const result = await (strategy as any).execute(context, (event: StreamEvent) => {
         sendSSEEvent(res, event);
       });
-
+      sendSSEEvent(res, {
+        type: 'done',
+        data: { message: result.responseText },
+        timestamp: new Date().toISOString()
+      });
       res.end();
     } catch (error) {
       // Send error event

@@ -28,7 +28,7 @@ export interface ConversationState {
 
 // Stream event interface
 export interface StreamEvent {
-  type: 'thinking' | 'tool_call' | 'tool_result' | 'graph_step' | 'complete' | 'error';
+  type: 'thinking' | 'tool_call' | 'tool_result' | 'graph_step' | 'done' | 'error' | 'status';
   data: any;
   timestamp: string;
 }

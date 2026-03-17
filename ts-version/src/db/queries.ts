@@ -175,3 +175,28 @@ export async function getFHIRResourcesSchemaInfo(db: DatabasePool): Promise<any>
   
   return schema;
 }
+
+
+// Get patient record by profile ID with clear_verifications
+export const getPatientByProfileId = async (db: DatabasePool, profileId: number) => {
+  const query = `
+    SELECT 
+      p.patient_id,
+      p.profile_id,
+      p.current_verification_id,
+      p.created_at as patient_created_at,
+      p.updated_at as patient_updated_at,
+      cv.verification_id,
+      cv.clear_identity_token,
+      cv.claims,
+      cv.verified_at,
+      cv.verification_status,
+      cv.verification_level,
+      cv.created_at as verification_created_at
+    FROM patients p
+    LEFT JOIN clear_verifications cv ON p.current_verification_id = cv.verification_id
+    WHERE p.profile_id = $1
+  `;
+  const result = await db.query(query, [profileId]);
+  return result.rows[0];
+};

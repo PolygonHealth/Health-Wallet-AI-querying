@@ -111,7 +111,7 @@ const getStreamingToolNode = (tools: any[]) => {
         }
 
         onEvent({
-          type: 'tool_call',
+          type: 'status',//'tool_call',
           data: {
             toolName,
             message
@@ -203,6 +203,18 @@ export function buildFHIRGraph(
   const llmNode = async (state: GraphState) => {
     // Mirror Python: simple state access without Zod validation
     const messages = state.messages || [];
+    const { onEvent } = state;
+
+    // Emit thinking event before LLM invocation
+    if (onEvent) {
+      onEvent({
+        type: 'status',
+        data: {
+          message: 'Thinking...'
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
 
     const response = await retryLLMCall(
       async () => {

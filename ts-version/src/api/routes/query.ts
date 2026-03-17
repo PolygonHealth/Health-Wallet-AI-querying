@@ -4,6 +4,7 @@ import { resolveStrategy } from '../dependencies';
 import { logger } from '../../config/logging';
 import { getDbPool } from '@/db/session';
 import { config } from '@/config/settings';
+import { getPatientIdFromHeaders } from '../utils/patientId';
 
 const router = Router();
 
@@ -119,6 +120,12 @@ router.post('/query', async (req: Request, res: Response) => {
     // Validate request
     const validatedQuery = QueryRequestSchema.parse(req.body);
     
+    // Get patientId from request body or headers
+    let patientId = validatedQuery.patientId;
+    if (!patientId) {
+      patientId = await getPatientIdFromHeaders(req);
+    }
+    
     const strategyName = validatedQuery.strategy || config.DEFAULT_STRATEGY;
     const modelName = validatedQuery.model || config.DEFAULT_MODEL;
 
@@ -131,7 +138,7 @@ router.post('/query', async (req: Request, res: Response) => {
       
       // Execute query (match Python: QueryContext)
       const context = QueryContextSchema.parse({
-        patientId: validatedQuery.patientId,
+        patientId,
         queryText: validatedQuery.query,
         strategyName,
         modelName,

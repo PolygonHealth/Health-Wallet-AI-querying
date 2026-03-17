@@ -200,3 +200,12 @@ export const getPatientByProfileId = async (db: DatabasePool, profileId: number)
   const result = await db.query(query, [profileId]);
   return result.rows[0];
 };
+
+
+// Get FHIR data for specific patient
+export const getFHIRUISummaryDataByPatientId = async (db: DatabasePool, patientId: string) => {
+  // TODO: Replace with your provided query that produces same structure as fhir.json
+  const query = "SELECT get_patient_summary($1, true) as fhir_data"
+  const result = await db.query(query, [patientId]);
+  return result.rows[0]?.fhir_data || {};
+};

@@ -7,7 +7,7 @@ import { DEFAULT_KEYWORD_LIMIT, DEFAULT_RESOURCE_LIMIT, SQL_MAX_ROWS } from '../
 // Context for resource type collection
 let _patientId: string = '';
 let _resourceTypesCollector: Set<string> = new Set();
-
+export const RESOURCE_CATEGORIES = ['conditions', 'medications', 'encounters', 'procedures', 'observations', 'allergies'];
 export function setRunContext(patientId: string, resourceTypesCollector: Set<string>) {
   _patientId = patientId;
   _resourceTypesCollector = resourceTypesCollector;
@@ -33,7 +33,16 @@ const SearchResourcesSchema = z.object({
   keyword: z.string().describe('Search term, e.g. diabetes, hypertension, medication name.'),
   limit: z.number().optional().default(DEFAULT_KEYWORD_LIMIT).describe('Max resources to return. Start with 5-10.')
 });
-
+//
+const ResourceDataLinksSchema = z.object({
+  relevantResourceTypes: z.array(z.string()).describe(`Given the user's question, decide which health data categories are relevant.
+ Available categories: ${RESOURCE_CATEGORIES.join(', ')}
+ Rules:
+ - Include ONLY relevant category names, e.g. ["medications","conditions"]
+ - If the question is general or could involve multiple categories, include all relevant ones.
+ - If unsure, include more rather than fewer.`)//'types of FHIR resources relevant to query, e.g. Condition, Observation, MedicationRequest`),
+ 
+});
 const ExecuteSqlSchema = z.object({
   sql: z.string().describe(`SELECT query using :pid for patient_id. Example: SELECT id AS resource_id, resource_type FROM fhir_resources WHERE patient_id = :pid AND resource_type = 'Condition' LIMIT 10`)
 });
@@ -235,6 +244,63 @@ Incorrect: p.individual->>'display'`,
     }
   );
 
+// async function routeQuery(prompt) {
+  
+//   try {
+//     const routerPrompt = `You are a query classifier for a patient health data system.
+// Given the user's question, decide which health data categories are relevant.
+// Available categories: ${RESOURCE_CATEGORIES.join(', ')}
+
+// Rules:
+// - Return ONLY a JSON array of relevant category names, e.g. ["medications","conditions"]
+// - If the question is general or could involve multiple categories, include all relevant ones.
+// - If unsure, include more rather than fewer.
+// - Return ONLY the JSON array, no other text.
+
+// User question: "${prompt}"`;
+
+//     const response = await ai.models.generateContent({
+//       model: 'gemini-3-flash-preview',
+//       contents: routerPrompt,
+//     });
+
+//     const text = (typeof response.text === 'function' ? response.text() : response.text).trim();
+//     const parsed = JSON.parse(text.replace(/```json?\n?/g, '').replace(/```/g, '').trim());
+//     const valid = parsed.filter(c => RESOURCE_CATEGORIES.includes(c));
+//     console.log('[HealthWallet Router] Query:', prompt.substring(0, 80));
+//     console.log('[HealthWallet Router] Relevant categories:', valid);
+//     return valid.length > 0 ? valid : RESOURCE_CATEGORIES;
+//   } catch (err) {
+//     console.warn('[HealthWallet Router] Classification failed, using all categories:', err.message);
+//     return RESOURCE_CATEGORIES;
+//   }
+// }
+
+const extractReferecesToResourceData = tool(
+    async (input) => {
+      const { keyword, limit = DEFAULT_KEYWORD_LIMIT } = SearchResourcesSchema.parse(input);
+      /**
+        Search across all FHIR resources by keyword (case-insensitive JSON content match).
+
+        Use when the patient asks about a specific condition, medication, or clinical term
+        and you want any record mentioning it — regardless of resource type.
+
+        Prefer get_resources_by_type when the resource type is already known.
+      */
+      const repo = _fhirResourcesRepo(dbPool);
+      const [result, resourceIds, types] = await repo.getResourcesByKeyword(keyword, limit);
+      _collect(types);
+      return result;
+    },
+    {
+      name: 'get_relevant_values_from_relevant_resource',
+      description: `Call this function to get links for names of medications, conditions etc that UI can render.  Aggregates names across FHIR resources relevant to the query.  Creates links used by the UI to display.
+      Use when the patient asks about a specific condition, medication, or clinical term and you want any record mentioning it — regardless of resource type.
+Refer get_resources_by_type when the resource type is already known.`,
+      schema: ResourceDataLinksSchema // ✅ Add schema
+    }
+  );
+
   return [
     getPatientOverview,
     getResourcesByType,
@@ -242,5 +308,7 @@ Incorrect: p.individual->>'display'`,
     executeSql,
     getFhirResourcesSchemaInfo,
     finishWithAnswer,
+    extractReferecesToResourceData
   ];
 }
+

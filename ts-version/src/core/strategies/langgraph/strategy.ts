@@ -35,14 +35,14 @@ export class LanggraphStrategy implements BaseStrategy {
 
     try {
       const startTime = Date.now();
-      
+
       // Emit thinking event
       onEvent({
         type: 'thinking',
         data: { message: 'Analyzing your health question...' },
         timestamp: new Date().toISOString()
       });
-      
+
       // Format system prompt with current date
       const currentDate = new Date().toLocaleDateString('en-US', {
         year: 'numeric',
@@ -50,14 +50,14 @@ export class LanggraphStrategy implements BaseStrategy {
         day: 'numeric'
       });
       const formattedPrompt = SYSTEM_PROMPT.replace('{current_date}', currentDate);
-      
+
       // ✅ Check if conversation exists
-      const existingState = await this._graph.getState({ 
-        configurable: { thread_id: `patient-${context.patientId}` } 
+      const existingState = await this._graph.getState({
+        configurable: { thread_id: `patient-${context.patientId}` }
       });
-      
+
       const hasExistingConversation = existingState?.values?.messages?.length > 0;
-      
+
       // ✅ Fresh conversation: system message + human message
       // ✅ Existing conversation: just human message (graph has the rest)
       const initialMessages = hasExistingConversation
@@ -73,13 +73,24 @@ export class LanggraphStrategy implements BaseStrategy {
         onEvent, // Pass callback through state
       };
 
-      const config = { configurable: { thread_id: `patient-${context.patientId}` } };
-      
+      const config = {
+        configurable: { thread_id: `patient-${context.patientId}` },
+        streamMode: "updates"
+      };
+
       // Use graph streaming for real-time events
       let finalState;
-      for await (const chunk of this._graph.stream(initialState, config)) {
+      const result = this._graph.stream(initialState, {
+        configurable: { thread_id: `patient-${context.patientId}` },
+      }, {
+        streamMode: "updates"
+      });
+      console.log(result.constructor.name);
+      for await (const chunk of this._graph.stream(initialState, config, {
+        streamMode: "updates"
+      })) {
         finalState = chunk.state;
-        
+
         // Emit graph-level events
         if (chunk.node === 'llm') {
           onEvent({
@@ -95,7 +106,7 @@ export class LanggraphStrategy implements BaseStrategy {
         } else if (chunk.node === 'tools') {
           const lastMessage = chunk.state.messages[chunk.state.messages.length - 1];
           const toolCalls = (lastMessage as any)?.tool_calls || [];
-          
+
           onEvent({
             type: 'graph_step',
             data: {
@@ -106,7 +117,7 @@ export class LanggraphStrategy implements BaseStrategy {
             timestamp: new Date().toISOString()
           });
         }
-        
+
         // ToolNode wrapper will emit tool-level events when onEvent is present
         // No additional events needed here since ToolNode handles it
       }
@@ -188,7 +199,7 @@ export class LanggraphStrategy implements BaseStrategy {
 
     try {
       const startTime = Date.now();
-      
+
       // Format system prompt with current date
       const currentDate = new Date().toLocaleDateString('en-US', {
         year: 'numeric',
@@ -196,14 +207,14 @@ export class LanggraphStrategy implements BaseStrategy {
         day: 'numeric'
       });
       const formattedPrompt = SYSTEM_PROMPT.replace('{current_date}', currentDate);
-      
+
       // ✅ Check if conversation exists
-      const existingState = await this._graph.getState({ 
-        configurable: { thread_id: `patient-${context.patientId}` } 
+      const existingState = await this._graph.getState({
+        configurable: { thread_id: `patient-${context.patientId}` }
       });
-      
+
       const hasExistingConversation = existingState?.values?.messages?.length > 0;
-      
+
       // ✅ Fresh conversation: system message + human message
       // ✅ Existing conversation: just human message (graph has the rest)
       const initialMessages = hasExistingConversation
@@ -303,7 +314,7 @@ export class LanggraphStrategy implements BaseStrategy {
     if (typeof content === 'string') {
       const trimmed = content.trim();
       if (!trimmed) return '';
-      
+
       try {
         const parsed = JSON.parse(trimmed);
         if (Array.isArray(parsed)) {
@@ -322,7 +333,7 @@ export class LanggraphStrategy implements BaseStrategy {
       }
       return trimmed;
     }
-    
+
     if (Array.isArray(content)) {
       const parts: string[] = [];
       for (const block of content) {
@@ -334,11 +345,11 @@ export class LanggraphStrategy implements BaseStrategy {
       }
       return parts.join('\n').trim();
     }
-    
+
     if (typeof content === 'object' && content !== null && 'text' in content) {
       return String(content.text).trim();
     }
-    
+
     return String(content).trim() || '';
   }
 }

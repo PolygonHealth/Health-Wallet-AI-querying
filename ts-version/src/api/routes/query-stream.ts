@@ -118,7 +118,6 @@ function sendSSEEvent(res: Response, event: StreamEvent) {
 function sendSSE(res: Response, event: string, data: any) {
   res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
-
 router.post('/query-stream', async (req: Request, res: Response) => {
   // Set SSE headers
   res.writeHead(200, {

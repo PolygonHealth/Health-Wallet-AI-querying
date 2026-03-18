@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { DatabasePool } from '../../../db/session';
 import { FhirRepository } from './repository';
 import { DEFAULT_KEYWORD_LIMIT, DEFAULT_RESOURCE_LIMIT, SQL_MAX_ROWS } from '../utils/constants';
+import { logger } from '@/config/logging';
 
 // Context for resource type collection
 let _patientId: string = '';
@@ -25,14 +26,19 @@ function _fhirResourcesRepo(db: DatabasePool): FhirRepository {
 
 // Zod schemas for tool inputs
 const ResourcesByTypeSchema = z.object({
-  resourceType: z.string().describe('Exact FHIR resource type, e.g. Condition, Observation, MedicationRequest. Not plural.'),
-  limit: z.number().optional().default(DEFAULT_RESOURCE_LIMIT).describe('Max resources to return. Start with 5-10. Increase only if needed.')
-}).passthrough();
+  resourceTypes: z.array(z.string()).describe(
+    'Exact FHIR resource types, singular. E.g. ["Condition", "MedicationRequest", "Observation"]'
+  ),
+  limit: z.number().optional().default(DEFAULT_RESOURCE_LIMIT).describe(
+    'Max resources per type. Start with 3-5. Increase only if needed.'
+  ),
+});
 
 const SearchResourcesSchema = z.object({
   keyword: z.string().describe('Search term, e.g. diabetes, hypertension, medication name.'),
   limit: z.number().optional().default(DEFAULT_KEYWORD_LIMIT).describe('Max resources to return. Start with 5-10.')
 });
+
 //
 const ResourceDataLinksSchema = z.object({
   relevantResourceTypes: z.array(z.string()).describe(`Given the user's question, decide which health data categories are relevant.
@@ -51,8 +57,28 @@ const ExecuteSqlSchema = z.object({
 });
 
 const FinishWithAnswerSchema = z.object({
-  answer: z.string().describe('Your complete response to the patient in markdown (headings, bullets, bold). No tables — use bullet or numbered lists. No citation numbers or source sections. Include a brief \'Polly\'s note\' summarizing key points in plain language. When referencing patient data: use inline citations (Resource ID: <uuid>) for tracking.'),
-  resource_ids: z.array(z.string()).optional().describe('Resource IDs you cited inline in your answer.')
+  answer: z.string().describe(
+    `Your complete response to the patient in markdown (headings, bullets, bold). No tables — use bullet or numbered lists. No citation numbers or source sections. Include a brief 'Polly's note' summarizing key points in plain language.
+
+    DATA LINKING: 
+    - When referencing any specific condition, medication, observation, procedure, encounter, or allergy, embed an inline markdown link so the user can navigate directly to that record.
+
+    Link format: [Display Text](healthwallet://RESOURCE/EXACT_NAME)
+
+    EXACT_NAME must exactly match the human-readable resource instance name as it appears in the patient data — this is typically found in code.text, but may also appear in code.coding[0].display, type[0].text, medicationCodeableConcept.text, or the resource's name field depending on resource type. 
+    Use whichever field is populated. EXACT_NAME must be URL-encoded if it contains special characters.
+
+    Rules:
+    - Only link to records that exist in the patient data. Never fabricate links.
+    - Embed links naturally within sentences, not grouped at the end.
+    - Examples:
+      - [Creatinine trend](healthwallet://observations/Creatinine%20%5BMass%2Fvolume%5D%20in%20Serum%20or%20Plasma)
+      - [lisinopril details](healthwallet://medications/lisinopril%2010%20MG%20Oral%20Tablet)
+      - [diabetes history](healthwallet://conditions/Diabetes)`
+  ),
+  resource_ids: z.array(z.string()).optional().describe(
+    'UUIDs of FHIR resources cited inline in your answer.'
+  )
 });
 
 export function createFHIRTools(
@@ -88,24 +114,50 @@ export function createFHIRTools(
 
   const getResourcesByType = tool(
     async (input) => {
-      const { resourceType, limit = DEFAULT_RESOURCE_LIMIT } = ResourcesByTypeSchema.parse(input);
+      const { resourceTypes, limit = DEFAULT_RESOURCE_LIMIT } = ResourcesByTypeSchema.parse(input);
       const repo = _fhirResourcesRepo(dbPool);
-      const [result, resourceIds, types] = await repo.getResourcesByType(resourceType, limit);
-      _collect(types);
-      return result;
+
+      // Fetch all types in parallel — one DB query per type, concurrent
+      const results = await Promise.allSettled(
+        resourceTypes.map(resourceType => repo.getResourcesByType(resourceType, limit))
+      );
+
+      const merged: any[] = [];
+      for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        if (result.status === 'fulfilled') {
+          const [json, , types] = result.value;
+          _collect(types);
+          const parsed = JSON.parse(json);
+          if (parsed.resources) merged.push(...parsed.resources);
+        } else {
+          // One type failed — return error for that type but keep the rest
+          logger.warn(`get_resources_by_type failed for ${resourceTypes[i]}: ${result.reason}`);
+          merged.push({ error: `Failed to fetch ${resourceTypes[i]}: ${String(result.reason)}. 
+            Try fetching ${resourceTypes[i]} individually.` });
+        }
+      }
+      
+      return JSON.stringify({ resources: merged, count: merged.length });
     },
     {
       name: 'get_resources_by_type',
-      description: `Fetch FHIR resources of a specific type for the patient. 
-      Use when you know which resource type to fetch — either because the patient asked
-      about it directly, or because 'get_patient_overview' confirmed it exists.
-
+      description: `Fetch FHIR resources for one or more resource types relevant to the user's question.
+      
+      Pass multiple types in one call when the question involves more than one resource type.
+      E.g. for "what medications am I on and do I have any allergies?" pass ["MedicationRequest", "AllergyIntolerance"].
+      
+      Use when you know which resource types to fetch — either because the patient asked
+      about them directly, or because 'get_patient_overview' confirmed they exist.
+      
       Prefer this over 'execute_sql' for all standard resource type queries.
-
-      resource_type must be exact and singular: Condition, Observation,
-      MedicationRequest, AllergyIntolerance, Procedure, DiagnosticReport, etc.`,
+      
+      Each type must be exact and singular: 'Condition', 'Observation',
+      'MedicationRequest', 'AllergyIntolerance', 'Procedure', 'DiagnosticReport', etc.
+      
+      limit applies per type, not total.`,
       schema: ResourcesByTypeSchema,
-    },
+    }
   );
 
   const searchResourcesByKeyword = tool(
@@ -180,125 +232,8 @@ export function createFHIRTools(
     },
     {
       name: 'finish_with_answer',
-      description: 'Always call last. For FHIR questions: cite inline as (Resource ID: <uuid>). Never return text without calling this.',
+      description: `Call at the end once you have built enough context to answer patient\'s query fully. Never return text without calling this.`,
       schema: FinishWithAnswerSchema
-    }
-  );
-
-// async function routeQuery(prompt) {
-  
-//   try {
-//     const routerPrompt = `You are a query classifier for a patient health data system.
-// Given the user's question, decide which health data categories are relevant.
-// Available categories: ${RESOURCE_CATEGORIES.join(', ')}
-
-// Rules:
-// - Return ONLY a JSON array of relevant category names, e.g. ["medications","conditions"]
-// - If the question is general or could involve multiple categories, include all relevant ones.
-// - If unsure, include more rather than fewer.
-// - Return ONLY the JSON array, no other text.
-
-// User question: "${prompt}"`;
-
-//     const response = await ai.models.generateContent({
-//       model: 'gemini-3-flash-preview',
-//       contents: routerPrompt,
-//     });
-
-//     const text = (typeof response.text === 'function' ? response.text() : response.text).trim();
-//     const parsed = JSON.parse(text.replace(/```json?\n?/g, '').replace(/```/g, '').trim());
-//     const valid = parsed.filter(c => RESOURCE_CATEGORIES.includes(c));
-//     console.log('[HealthWallet Router] Query:', prompt.substring(0, 80));
-//     console.log('[HealthWallet Router] Relevant categories:', valid);
-//     return valid.length > 0 ? valid : RESOURCE_CATEGORIES;
-//   } catch (err) {
-//     console.warn('[HealthWallet Router] Classification failed, using all categories:', err.message);
-//     return RESOURCE_CATEGORIES;
-//   }
-// }
-
-const extractReferecesToResourceData = tool(
-    async (input) => {
-      const {relevantResourceTypes } = ResourceDataLinksSchema.parse(input);
-      /**
-        Search across all FHIR resources by keyword (case-insensitive JSON content match).
-
-        Use when the patient asks about a specific condition, medication, or clinical term
-        and you want any record mentioning it — regardless of resource type.
-
-        Prefer get_resources_by_type when the resource type is already known.
-      */
-      const repo = _fhirResourcesRepo(dbPool);
-      const { context } = await repo.buildContextForLinks(relevantResourceTypes);
-   const contextJson = JSON.stringify(context);
-const fullPrompt = `
-      TASK:
-      You are a friendly, warm, and slightly witty medical assistant chatbot named "Polly" for a patient-centric health wallet.
-      You have two sources of information:
-      1. The patient's personal health data provided below (loaded with full detail for: ${relevantResourceTypes.join(', ')}).
-      2. Google Search, which you should actively use to look up drug comparisons, treatment options, medical terminology, latest clinical guidelines, or any question that goes beyond the patient's raw data.
-
-      PERSONALITY:
-      - Be personable and warm — like a knowledgeable friend who happens to have medical expertise.
-      - Use a light touch of humor where appropriate (e.g., "Your records show you're on lisinopril — a classic choice, very popular at the blood-pressure-lowering party!").
-      - But always stay professional on serious topics — never joke about diagnoses, prognoses, or patient fears.
-      - Use the patient's name occasionally to make it feel personal.
-      - Keep things conversational, not clinical. Say "looks like" instead of "records indicate," etc.
-
-      INSTRUCTIONS:
-      - First, use the patient's health data to understand their situation.
-      - Always clearly distinguish between information from the patient's records vs. information from web sources.
-      - Do not invent medical advice. Recommend consulting a healthcare provider for personalized decisions.
-      - Add a "Polly's note" to summarize each aspect of the output in your own words that the patient can undertand easily
-      - Format your response in markdown (headings, bullet points, bold text as appropriate).
-      - NEVER use markdown tables. Use bullet points or numbered lists instead.
-      - DO NOT add your own citation numbers, source links, reference lists, or footnotes in your response. Citations are handled automatically by the system. Just write your answer naturally without any [1], [2], (source), or "Sources:" sections.
-
-      DATE AWARENESS:
-      - Today's date is ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}.
-      - When discussing the patient's health, give more weight to recent data. Older records are useful for context and trends, but the patient's current situation is best reflected by the most recent entries.
-      - If the user asks about their "current" status without specifying a date, focus primarily on the most recent data points.
-      - When referencing data, mention how recent or old it is (e.g., "as of your last reading in March 2024" or "back in 2019").
-      - If data is significantly outdated (e.g., several years old), note that and suggest the patient may want to get updated tests or check-ups.
-
-      WEB SEARCH — WHEN AND HOW:
-      - You MUST use Google Search for any of these scenarios:
-        1. The user asks about medications (side effects, alternatives, interactions, dosage, comparisons).
-        2. The user asks about a condition (prognosis, treatment options, lifestyle recommendations, what it means).
-        3. The user asks about lab values or observations (what is a normal range, what does high/low mean, clinical significance).
-        4. The user asks about procedures (what to expect, recovery, risks).
-        5. Any question that requires medical knowledge beyond what is in the raw patient data.
-        6. Any question about latest guidelines, research, or general health advice.
-      - When the query is purely about what data exists in the patient's records (e.g., "list my medications", "when was my last visit"), you can answer from the data alone without searching.
-      - When in doubt, SEARCH. It is better to ground your answer with real sources than to rely on your training data alone.
-
-      DATA LINKING:
-      - When you reference specific patient data (a condition, medication, observation, etc.), create an inline link so the user can view that data directly.
-      - Use this exact markdown link format: [Display Text](healthwallet://RESOURCE/EXACT_NAME)
-      - RESOURCE must be one of: conditions, medications, encounters, procedures, observations, allergies
-      - EXACT_NAME must match exactly as it appears in the patient data context (case-sensitive, URL-encoded if it contains special characters).
-      - Examples:
-        - [View Creatinine trend](healthwallet://observations/Creatinine%20%5BMass%2Fvolume%5D%20in%20Serum%20or%20Plasma)
-        - [lisinopril details](healthwallet://medications/lisinopril%2010%20MG%20Oral%20Tablet)
-        - [diabetes history](healthwallet://conditions/Diabetes)
-      - Only link to data that actually exists in the patient context. Do not fabricate links.
-      - Use these links naturally within sentences — do NOT group them all at the end.`+
-
-      // PATIENT_PROMPT:
-      // ${prompt}
-
-      `PATIENT_HEALTH_DATA_CONTEXT:
-      ${contextJson}
-      `;
-      //_collect(types);
-      return contextJson//result;
-    },
-    {
-      name: 'get_relevant_values_from_relevant_resource',
-      description: `Call this function to get links for names of medications, conditions etc that UI can render.  Aggregates names across FHIR resources relevant to the query.  Creates links used by the UI to display.
-      Use when the patient asks about a specific condition, medication, or clinical term and you want any record mentioning it — regardless of resource type.
-Refer get_resources_by_type when the resource type is already known.`,
-      schema: ResourceDataLinksSchema // ✅ Add schema
     }
   );
 
@@ -308,8 +243,7 @@ Refer get_resources_by_type when the resource type is already known.`,
     searchResourcesByKeyword,
     executeSql,
     getFhirResourcesSchemaInfo,
-    finishWithAnswer,
-    extractReferecesToResourceData
+    finishWithAnswer
   ];
 }
 

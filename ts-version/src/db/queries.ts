@@ -1,4 +1,6 @@
+import { DEFAULT_KEYWORD_LIMIT, DEFAULT_RESOURCE_LIMIT } from '@/core/strategies/utils/constants';
 import { logger } from '../config/logging';
+import { writeFileSync } from 'fs';
 
 function formatError(error: unknown) {
   if (error instanceof Error) {
@@ -72,7 +74,7 @@ export async function getFHIRByType(
   db: DatabasePool,
   patientId: string,
   resourceType: string,
-  limit: number = 20
+  limit: number = DEFAULT_RESOURCE_LIMIT
 ): Promise<any[]> {
   logger.info(`fhir_query | patient_id=${patientId} | filter=${resourceType} | limit=${limit}`);
   
@@ -106,7 +108,7 @@ export async function searchResourcesByKeyword(
   db: DatabasePool,
   patientId: string,
   keyword: string,
-  limit: number = 10
+  limit: number = DEFAULT_KEYWORD_LIMIT
 ): Promise<any[]> {
   logger.info(`fhir_search | patient_id=${patientId} | keyword=${keyword} | limit=${limit}`);
   const pattern = `%${keyword}%`;

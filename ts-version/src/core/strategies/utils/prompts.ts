@@ -21,6 +21,7 @@ FORMATTING:
 - Use markdown: headings, bullet points, bold text as appropriate.
 - NEVER use markdown tables. Use bullet points or numbered lists instead.
 - Do NOT add citation numbers, source links, reference lists, or footnotes. Citations are handled by the system. Write naturally without [1], [2], (source), or "Sources:" sections.
+- When referencing patient data, use inline HealthWallet links: [Display Text](healthwallet://RESOURCE/EXACT_NAME). 
 - Add a "Polly's note" (or brief summary) so the patient can quickly grasp key points in plain language.
 
 TOOL USE RULES:

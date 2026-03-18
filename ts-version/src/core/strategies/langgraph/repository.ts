@@ -24,6 +24,12 @@ import { RESOURCE_CATEGORIES } from './tools';
 
 const TRUNCATION_MESSAGE = 'Result truncated. Use more specific filters to reduce result size.';
 
+function toHealthwalletLink(resourceCategory: string, exactName: string): string | null {
+  if (!RESOURCE_CATEGORIES.includes(resourceCategory)) return null;
+  if (!exactName) return null;
+  return `healthwallet://${resourceCategory}/${encodeURIComponent(exactName)}`;
+}
+
 function truncate(data: any, toolName: string): string {
   /**Serialize and truncate if over MAX_SINGLE_TOOL_CHARS.*/
   const jsonStr = JSON.stringify(data, (key, value) =>
@@ -187,40 +193,27 @@ export class FhirRepository {
 
 
   // --- Build context: full details for relevant categories, summaries for others ---
-  async buildContextForLinks(relevantCategories: string[]) {
-    try {
-      const fhirData = await getFHIRUISummaryDataByPatientId(this.db, this.patient_id);
-      const context: any = {
-        patient: {
-          name: fhirData.name,
-          gender: fhirData.gender,
-          birth_date: fhirData.birth_date,
-          patient_id: fhirData.patient_id,
-        },
-      };
-
-      for (const cat of RESOURCE_CATEGORIES) {
-        const data = fhirData[cat] || [];
-        if (relevantCategories.includes(cat)) {
-          // Full data with details for relevant categories
-          context[cat] = data;
-        } else {
-          // Lightweight summaries for non-relevant categories
-          context[cat + '_summary'] = data.map((item: any) => ({
-            name: item.name,
-            start: item.start,
-            ...(item.status && { status: item.status }),
-          }));
-        }
-      }
-
-      return { context };
-    } catch (error) {
-      logger.error('repo_error | method=buildContextForLinks | error=%s', error);
-      throw error;
+  async buildContextNamesOnly(relevantResourceTypes: string[]): Promise<Record<string, any>> {
+    logger.info(`buildContextNamesOnly | patient_id=${this.patient_id} | relevantResourceTypes: ${relevantResourceTypes}`);
+    const fhirData = await getFHIRUISummaryDataByPatientId(this.db, this.patient_id);
+    const context: Record<string, any> = {};
+  
+    const validCategories = relevantResourceTypes.filter(cat => RESOURCE_CATEGORIES.includes(cat));
+  
+    for (const cat of validCategories) {
+      const data = fhirData[cat] || [];
+      context[cat] = (Array.isArray(data) ? data : [])
+        .map((item: any) => {
+          const name = item?.name;
+          if (!name) return null;
+          const link = toHealthwalletLink(cat, name);
+          return { name, link };
+      })
+      .filter(Boolean);
     }
-  }
 
+    return context;
+  }
 
 }
 

@@ -21,6 +21,7 @@ import {
 } from '../utils/constants';
 import { validateSQL, SQLValidationError } from '../utils/sql_guard';
 import { RESOURCE_CATEGORIES } from './tools';
+import { descopeInlineReferences } from '../utils/descope_ui_link';
 
 const TRUNCATION_MESSAGE = 'Result truncated. Use more specific filters to reduce result size.';
 
@@ -164,6 +165,7 @@ export class FhirRepository {
 
   getFinalAnswer(answer: string, resource_ids: string[]): string {
     /**Package the final answer as a JSON string for ToolMessage content.*/
+    answer = descopeInlineReferences(answer);
     return JSON.stringify({
       answer,
       resource_ids: [...new Set(resource_ids)], // Deduplicate
@@ -203,7 +205,9 @@ export class FhirRepository {
         const data = fhirData[cat] || [];
         if (relevantCategories.includes(cat)) {
           // Full data with details for relevant categories
-          context[cat] = data;
+          context[cat] = data.map((item: any) => ({
+            name: item.name,
+          }));
         } else {
           // Lightweight summaries for non-relevant categories
           context[cat + '_summary'] = data.map((item: any) => ({

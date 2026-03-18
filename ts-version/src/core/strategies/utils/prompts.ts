@@ -25,6 +25,12 @@ FORMATTING:
 
 TOOL USE RULES:
 - Be surgical: start with small limits (5–10). Increase only if initial results are insufficient.
-- Be precise and to the point, don't be verbose.`;
+- Be precise and to the point, don't be verbose.
+
+FINAL ANSWER — MANDATORY:
+- When you have enough context to answer, you MUST call the 'finish_with_answer' tool. This is the ONLY way to deliver your answer to the patient.
+- NEVER write your final answer as a plain text message. The system CANNOT display plain text responses — only answers submitted through finish_with_answer will reach the patient.
+- Include all resource_ids you collected from tool calls.
+- If you are unsure or data is incomplete, still call finish_with_answer with what you have and note the limitations in your answer.`;
 
 export const BUDGET_EXCEEDED_PROMPT = `Context budget exceeded. Answer the patient's question now using only the data you have already retrieved. Do not make more tool calls. Summarize what you found and note any limitations.`;

@@ -65,6 +65,7 @@ const FinishWithAnswerSchema = z.object({
 
     Link format: [Display Text](healthwallet://RESOURCE/EXACT_NAME)
 
+    RESOURCE must be a valid FHIR resource type: Condition, Medication, Observation, etc.
     EXACT_NAME must exactly match the human-readable resource instance name as it appears in the patient data — this is typically found in code.text, but may also appear in code.coding[0].display, type[0].text, medicationCodeableConcept.text, or the resource's name field depending on resource type. 
     Use whichever field is populated. EXACT_NAME must be URL-encoded if it contains special characters.
 
@@ -228,11 +229,12 @@ export function createFHIRTools(
     async (input) => {
       const { answer, resource_ids } = FinishWithAnswerSchema.parse(input);
       const repo = _fhirResourcesRepo(dbPool);
+
       return repo.getFinalAnswer(answer, resource_ids || []);
     },
     {
       name: 'finish_with_answer',
-      description: `Call at the end once you have built enough context to answer patient\'s query fully. Never return text without calling this.`,
+      description: `You MUST always call this tool exactly once you have built enough context to answer patient's query fully.`,
       schema: FinishWithAnswerSchema
     }
   );

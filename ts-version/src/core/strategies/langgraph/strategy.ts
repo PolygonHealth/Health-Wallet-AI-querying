@@ -8,6 +8,7 @@ import { setRunContext } from './tools';
 import { SYSTEM_PROMPT } from '../utils/prompts';
 import { logger } from '../../../config/logging';
 import { registerStrategy } from '../../strategy-registry';
+import { writeFileSync } from 'fs';
 
 @registerStrategy('langgraph')
 export class LanggraphStrategy implements BaseStrategy {
@@ -233,6 +234,9 @@ export class LanggraphStrategy implements BaseStrategy {
       const config = { configurable: { thread_id: `patient-${context.patientId}` } };
       const finalState = await this._graph.invoke(initialState, config);
 
+      // print into a file called final_state.json
+      writeFileSync('final_state.json', JSON.stringify(finalState, null, 2));
+      
       const { answer, resourceIds } = this.extractFinal(finalState.messages || []);
       const latencyMs = Date.now() - startTime;
       const modelId = (this.llm as any).model || 'unknown';

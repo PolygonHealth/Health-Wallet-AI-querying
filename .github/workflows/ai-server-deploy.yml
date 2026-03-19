@@ -99,6 +99,7 @@ jobs:
           DEFAULT_STRATEGY=${{ secrets.DEFAULT_STRATEGY_PROD }}
           DEFAULT_MODEL=${{ secrets.DEFAULT_MODEL_PROD }}
           LOG_LEVEL=${{ secrets.LOG_LEVEL_PROD }}
+          PORT=10000
           EOF"
         if: github.ref == 'refs/heads/main'
       
@@ -110,6 +111,7 @@ jobs:
           DEFAULT_STRATEGY=${{ secrets.DEFAULT_STRATEGY_TEST }}
           DEFAULT_MODEL=${{ secrets.DEFAULT_MODEL_TEST }}
           LOG_LEVEL=${{ secrets.LOG_LEVEL_TEST }}
+          PORT=10000
           EOF"
         if: github.ref != 'refs/heads/main'
           

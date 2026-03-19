@@ -1,0 +1,123 @@
+name: Deploy Health Wallet AI Server to EC2
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'main-test'
+    paths: 'ts-version/**'
+    
+env:      
+  folder_path: "/home/ubuntu/health-wallet-ai/"
+  ec2_host_test: "ec2-3-139-223-3.us-east-2.compute.amazonaws.com"
+  ec2_host_prod: "ec2-3-86-98-243.compute-1.amazonaws.com"
+
+defaults:
+  run:
+    working-directory: ./ts-version
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+          
+      - name: Set vars for PROD          
+        if: github.ref == 'refs/heads/main'
+        run: |
+            echo "PROD: ${{ github.ref }}"
+            echo "ec2=${{ env.ec2_host_prod }}" >> $GITHUB_ENV
+            echo "test_vs_prod=prod" >> $GITHUB_ENV     
+            
+      - name: Set vars for other environments          
+        if: github.ref != 'refs/heads/main'
+        run: |            
+            echo "NON PROD: ${{ github.ref }}"
+            echo "ec2=${{ env.ec2_host_test }}" >> $GITHUB_ENV
+            echo "test_vs_prod=test" >> $GITHUB_ENV 
+      
+      - name: Check vars            
+        run: |
+            echo "github.ref:  ${{ github.ref }}"
+            echo "ec2: $ec2"
+            echo "test_vs_prod: $test_vs_prod"
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '21.7.1'
+
+      - name: Show working directory
+        run: pwd  
+                
+      - name: Install dependencies
+        run: npm install --legacy-peer-deps
+
+      - name: TypeScript build
+        run: npm run build
+     
+      - name: List ./dist/* directory
+        run: ls ./dist/*
+
+      - name: Install putty-tools if not installed
+        run: |
+          if ! dpkg -l | grep -q putty-tools; then
+           echo "putty-tools is NOT installed."
+            sudo apt-get update
+            sudo apt-get install -y putty-tools
+          else
+            echo "putty-tools is already installed."
+          fi
+
+      - name: Convert PPK to PEM
+        run: |
+            puttygen ../polygon-map-$test_vs_prod.ppk -O private-openssh -o ../key.pem
+            chmod 400 ../key.pem
+      
+      - name: List working directory
+        run: ls
+
+      - name: Add SSH key to agent
+        run: |
+          eval "$(ssh-agent -s)"
+          ssh-add ../key.pem
+
+      - name: Clean and Copy files to server
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ../key.pem ubuntu@$ec2 'echo ${{ env.folder_path }};  rm -rf ${{ env.folder_path }}; mkdir -p  ${{ env.folder_path }};'
+          scp -o StrictHostKeyChecking=no -i ../key.pem -r ./dist/* ubuntu@$ec2:${{ env.folder_path }}          
+          scp -o StrictHostKeyChecking=no -i ../key.pem -r ./package.json ubuntu@$ec2:${{ env.folder_path }}    
+          scp -o StrictHostKeyChecking=no -i ../key.pem -r ./package-lock.json ubuntu@$ec2:${{ env.folder_path }}    
+          
+      - name: Create .env file on server
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ../key.pem ubuntu@$ec2 "cd ${{ env.folder_path }} && cat > .env << EOF
+          DATABASE_URL=${{ secrets.DATABASE_URL_PROD }}
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY_PROD }}
+          DEFAULT_STRATEGY=${{ secrets.DEFAULT_STRATEGY_PROD }}
+          DEFAULT_MODEL=${{ secrets.DEFAULT_MODEL_PROD }}
+          LOG_LEVEL=${{ secrets.LOG_LEVEL_PROD }}
+          EOF"
+        if: github.ref == 'refs/heads/main'
+      
+      - name: Create .env file on server (Test)
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ../key.pem ubuntu@$ec2 "cd ${{ env.folder_path }} && cat > .env << EOF
+          DATABASE_URL=${{ secrets.DATABASE_URL_TEST }}
+          GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY_TEST }}
+          DEFAULT_STRATEGY=${{ secrets.DEFAULT_STRATEGY_TEST }}
+          DEFAULT_MODEL=${{ secrets.DEFAULT_MODEL_TEST }}
+          LOG_LEVEL=${{ secrets.LOG_LEVEL_TEST }}
+          EOF"
+        if: github.ref != 'refs/heads/main'
+          
+      - name: Install Dependencies
+        run: ssh -o StrictHostKeyChecking=no -i ../key.pem ubuntu@$ec2 'source ~/.bashrc && cd ${{ env.folder_path }}; ls; nvm use 21.7.1; echo $PATH; node -v; nvm ls;  npm install --legacy-peer-deps;'
+        
+      - name: Verify .env file
+        run: ssh -o StrictHostKeyChecking=no -i ../key.pem ubuntu@$ec2 'cd ${{ env.folder_path }} && cat .env'
+          
+      - name: remove key.pem
+        run: rm ../key.pem

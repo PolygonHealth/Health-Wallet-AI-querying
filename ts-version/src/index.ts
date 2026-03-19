@@ -2,6 +2,8 @@ import { createApp } from './api/app';
 import { config } from './config/settings';
 import { logger } from './config/logging';
 
+// Deployment test trigger - updated to test GitHub Actions workflow
+
 async function startServer() {
   try {
     const app = createApp();
